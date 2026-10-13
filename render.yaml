@@ -1,0 +1,26 @@
+# Acesso restrito ao Revisor do Fechamento (colaborador): uma empresa só, sem Estratégia SCP nem Visão estratégica.
+services:
+  - type: web
+    name: revisor-fechamento-colaborador
+    runtime: python
+    plan: starter
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 revisor_fechamento.py --sem-navegador
+    disk:
+      name: dados
+      mountPath: /dados
+      sizeGB: 1
+    envVars:
+      - key: REVISOR_DADOS
+        value: /dados
+      - key: REVISOR_PERFIL
+        value: colaborador
+      - key: REVISOR_EMPRESA
+        sync: false
+      - key: REVISOR_USUARIO
+        sync: false
+      - key: REVISOR_SENHA
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.9.18

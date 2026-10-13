@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {"name": "revisor-fechamento", "runtimeExecutable": "python3", "runtimeArgs": ["revisor_fechamento.py", "--sem-navegador"], "port": 8766}
+  ]
+}

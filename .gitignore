@@ -1,0 +1,15 @@
+# dados de clientes e estado local: nunca vão para o repositório
+sessao/
+saida/
+fechamentos/
+config/admin.json
+config/mapeamentos.json
+exemplo/lote/
+# cópias de segurança
+*.bak*
+web/index.antes-*.html
+__pycache__/
+*.pyc
+.DS_Store
+config/acesso-*.txt
+exemplo/validar_planilha_junho.py
