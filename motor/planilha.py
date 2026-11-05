@@ -325,7 +325,7 @@ def analisar(caminho, ajuste=None, servicos=False, locacoes=False):
             # do relatório de locação só interessam o número da nota, o cliente e o valor da locação
             mapa = {k: v for k, v in mapa.items() if k in CAMPOS_LOCACAO}
             if linha_cab is not None:
-                filtro_loc = _coluna_locacao(linhas[linha_cab + 1:])
+                filtro_loc = _coluna_locacao(linhas[linha_cab + 1:], linhas[linha_cab])
         cab = [_txt(c) for c in linhas[linha_cab]] if linha_cab is not None and linha_cab < len(linhas) else []
         amostra = [[_txt(c) for c in r] for r in linhas[(linha_cab or 0) + 1:(linha_cab or 0) + 6]]
         n_dados = sum(1 for r in linhas[(linha_cab or 0) + 1:] if any(_txt(c) for c in r)) if linha_cab is not None else 0
@@ -333,8 +333,13 @@ def analisar(caminho, ajuste=None, servicos=False, locacoes=False):
         if locacoes and linha_cab is not None:
             if filtro_loc:
                 fora = filtro_loc['fora']
-                alertas.append({'sev': 'info', 'campo': 'valor_contabil', 'txt': 'Só as linhas de locação entram (coluna "%s"): %d linha(s) de outro tipo ficaram fora (%s).'
-                                % (cab[filtro_loc['col']] if filtro_loc['col'] < len(cab) else '', sum(fora.values()), ', '.join('%s: %d' % kv for kv in sorted(fora.items())))})
+                rot = cab[filtro_loc['col']] if filtro_loc['col'] < len(cab) else ''
+                if filtro_loc.get('nenhuma'):
+                    alertas.append({'sev': 'alerta', 'campo': 'valor_contabil', 'txt': 'Nenhuma linha com Locação na coluna "%s": nada deste relatório entrou como locação.' % rot})
+                else:
+                    tipos = sorted(fora.items(), key=lambda kv: -kv[1])
+                    alertas.append({'sev': 'info', 'campo': 'valor_contabil', 'txt': 'Só as linhas de locação entram (coluna "%s"): %d linha(s) de outro tipo ficaram fora (%s%s).'
+                                    % (rot, sum(fora.values()), ', '.join('%s: %d' % kv for kv in tipos[:8]), ' e mais %d tipo(s)' % (len(tipos) - 8) if len(tipos) > 8 else '')})
             if 'participante' not in mapa and 'cnpj' not in mapa:
                 alertas.append({'sev': 'alerta', 'campo': 'participante', 'txt': 'O relatório não tem coluna de cliente (locatário/parceiro). Exporte do sistema com o nome ou CNPJ do cliente para ele aparecer.'})
         saida.append({'arquivo': os.path.basename(caminho), 'aba': aba['aba'], 'linha_cab': linha_cab, 'mapa': mapa, 'prova': prova, 'alertas': alertas,
@@ -346,37 +351,49 @@ def analisar(caminho, ajuste=None, servicos=False, locacoes=False):
 CAMPOS_LOCACAO = ('numero', 'valor_contabil', 'participante', 'cnpj')
 
 
-def _coluna_locacao(dados):
-    """Relatório que mistura locação com outras vendas (ex.: TOP 'VENDA LOCAÇÃO' e 'VENDA NFS-E'): acha a coluna
-    que diz o tipo da linha. Sem essa coluna, todas as linhas valem como locação."""
+def _tem_locacao(v, so_locacao=False):
+    """Texto já normalizado fala de locação? 'alocação' não conta; aluguel só vale fora da coluna Produto."""
+    return bool(re.search(r'(?<![a-z])locac', v)) or (not so_locacao and 'aluguel' in v)
+
+
+def _coluna_locacao(dados, cab=None):
+    """Relatório que mistura locação com outras saídas: acha a coluna que diz o tipo da linha.
+    1º a coluna Produto (entra só o que diz Locação, por mais produtos que o relatório tenha; sem nenhuma
+    linha de locação, nada entra). 2º qualquer coluna com poucos valores (ex.: TOP 'VENDA LOCAÇÃO' e 'VENDA NFS-E').
+    Sem coluna assim, todas as linhas valem como locação."""
     dados = [r for r in dados if any(_txt(c) for c in r)]
     if not dados:
         return None
     ncol = max(len(r) for r in dados)
+    def vals(j):
+        return [norm(_txt(r[j])) if j < len(r) else '' for r in dados]
+    def montar(j, so_locacao):
+        fora = {}
+        for r in dados:
+            v = _txt(r[j]) if j < len(r) else ''
+            if v and not _tem_locacao(norm(v), so_locacao):
+                fora[v] = fora.get(v, 0) + 1
+        return {'col': j, 'fora': fora, 'so_locacao': so_locacao, 'nenhuma': not any(_tem_locacao(v, so_locacao) for v in vals(j))}
+    prod = [j for j, t in enumerate(cab or []) if 'produto' in norm(_txt(t))]
+    if prod:
+        # entre "Cód. Produto" e "Descrição do Produto", vale a que tem Locação; se nenhuma tem, a que tem mais texto
+        com = [(sum(1 for v in vals(j) if _tem_locacao(v, True)), j) for j in prod]
+        j = max(com)[1] if max(com)[0] else max(prod, key=lambda k: sum(1 for v in vals(k) if re.search(r'[a-z]', v)))
+        return montar(j, True)
     melhor = None
     for j in range(ncol):
-        vals = [norm(_txt(r[j])) if j < len(r) else '' for r in dados]
-        com = sum(1 for v in vals if 'locac' in v or 'aluguel' in v)
-        sem = [v for v in vals if v and not ('locac' in v or 'aluguel' in v)]
-        if com and sem and len(set(vals)) <= 12 and (melhor is None or com > melhor[1]):
-            melhor = (j, com, sem)
-    if not melhor:
-        return None
-    j, _, sem = melhor
-    fora = {}
-    for r in dados:
-        v = _txt(r[j]) if j < len(r) else ''
-        if v and not ('locac' in norm(v) or 'aluguel' in norm(v)):
-            fora[v] = fora.get(v, 0) + 1
-    return {'col': j, 'fora': fora}
+        vs = vals(j)
+        n = sum(1 for v in vs if _tem_locacao(v))
+        if n and any(v and not _tem_locacao(v) for v in vs) and len(set(vs)) <= 12 and (melhor is None or n > melhor[1]):
+            melhor = (j, n)
+    return montar(melhor[0], False) if melhor else None
 
 
 def eh_locacao(row, filtro):
     if not filtro:
         return True
     j = filtro['col']
-    v = norm(_txt(row[j])) if j < len(row) else ''
-    return 'locac' in v or 'aluguel' in v
+    return _tem_locacao(norm(_txt(row[j])) if j < len(row) else '', filtro.get('so_locacao'))
 
 
 def _conferir(linhas, linha_cab, mapa, cab):
