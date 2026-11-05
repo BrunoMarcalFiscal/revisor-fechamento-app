@@ -283,6 +283,7 @@ def numeracao(notas, docs, inuts, lancs, emp, Nota, competencia=''):
                     novas.append(n)
                     reg['problemas'].append('%s lançado' % num)
         faixas.append(reg)
+    canceladas = {(d['modelo'], str(int(d['serie'] or 0)), int(d['numero'] or 0)) for d in docs if d.get('cancelada') and d.get('tipo') == 'nfe'}
     pulos = []
     for (mod, serie), nums in proprias.items():
         if len(nums) < 2:
@@ -290,6 +291,9 @@ def numeracao(notas, docs, inuts, lancs, emp, Nota, competencia=''):
         cobertos = nums | inut_set[(mod, serie)]
         faltam = [x for x in range(min(nums), max(nums) + 1) if x not in cobertos]
         for ini, fim in _faixas(faltam)[:50]:
+            # intervalo enorme depois de notas só canceladas é número fora da sequência, não nota faltando
+            if fim - ini >= 100 and all((mod, serie, x) in canceladas for x in nums if x < ini):
+                continue
             n = Nota('saida', None, [])
             n.numeracao = {'modelo': mod, 'serie': serie, 'ini': ini, 'fim': fim}
             txt = ('%s' % ini) if ini == fim else ('%s a %s' % (ini, fim))
