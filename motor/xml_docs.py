@@ -37,7 +37,7 @@ def ler(caminho, conteudo=None):
     if root.find('.//infCte') is not None or tag == 'infCte':
         return [_cte(root, caminho)]  # antes da NF-e: o CT-e cita as NF-e em infDoc/infNFe
     if root.find('.//infNFe/ide') is not None or tag == 'infNFe':
-        return [_nfe(root, caminho)]
+        return [_nfe(root, caminho)] + _cancelamentos_embutidos(root, caminho)
     if root.find('.//infInut') is not None:
         inf = root.find('.//infInut')
         ret = root.find('.//retInutNFe/infInut')
@@ -146,6 +146,17 @@ def _cte(root, caminho):
         'protocolo': _t(root, './/protCTe/infProt/cStat'),
     }
     return d
+
+def _cancelamentos_embutidos(root, caminho):
+    """Pacote do DF-e (raiz NFeLog) traz os eventos da nota no próprio arquivo, em eveNFe. Só vale cancelamento homologado pela SEFAZ."""
+    out = []
+    for ev in root.findall('.//eveNFe'):
+        ret = ev.find('retEvento/infEvento')
+        if ret is not None and _t(ret, 'tpEvento') in ('110111', '110112') and _t(ret, 'cStat') in ('135', '136', '155'):
+            inf = ev.find('evento/infEvento')
+            out.append({'tipo': 'evento', 'arquivo': os.path.basename(caminho), 'chave': _t(ret, 'chNFe'), 'tpEvento': _t(ret, 'tpEvento'), 'cancelamento': True,
+                        'descEvento': _t(inf, 'detEvento/descEvento'), 'xCorrecao': '', 'dh': _t(inf, 'dhEvento')[:10], 'cStat': _t(ret, 'cStat')})
+    return out
 
 def _evento(root, caminho):
     inf = root.find('.//infEvento')
