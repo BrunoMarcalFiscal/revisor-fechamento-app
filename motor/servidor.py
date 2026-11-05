@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Servidor local do Revisor do Fechamento (só biblioteca padrão + openpyxl/PyMuPDF já instalados)."""
-import os, json, zipfile, io, shutil, re, traceback, urllib.parse
+import glob, os, json, zipfile, io, shutil, re, threading, traceback, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from . import comparador, planilha, exportar, relatorios, estrategico, scp, scp_planilha
 
@@ -104,6 +104,45 @@ def arquivar(res=None):
             'fechado_em': meta_ant.get('fechado_em', '')}
     json.dump(meta, open(os.path.join(dest, 'meta.json'), 'w', encoding='utf-8'), ensure_ascii=False)
     return meta
+
+
+def _acesso_cliente(cnpj):
+    """Dados de envio ao link da cliente (config/acesso-*.txt, fora do git). Só no Revisor completo e só para a empresa daquele acesso."""
+    if colaborador():
+        return None
+    for arq in sorted(glob.glob(os.path.join(DADOS, 'config', 'acesso-*.txt'))):
+        v = dict(re.findall(r'^\s*([^:=#\n]+?)\s*[:=]\s*(\S+)\s*$', open(arq, encoding='utf-8').read(), flags=re.M))
+        if v.get('REVISOR_EMPRESA') == cnpj and v.get('REVISOR_IMPORT_TOKEN') and v.get('Endereço'):
+            return v
+    return None
+
+
+def enviar_cliente(res):
+    """Manda o fechamento guardado ao link da cliente, que já abre nele. A Estratégia SCP não vai (scp.json fica fora)."""
+    import datetime, urllib.request
+    fid = _id_fech(res)
+    v = _acesso_cliente((res.get('empresa') or {}).get('cnpj'))
+    if not v:
+        return None
+    r = {'id': fid, 'em': datetime.datetime.now().strftime('%d/%m/%Y %H:%M'), 'ok': False}
+    try:
+        dest, buf = os.path.join(HIST, fid), io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+            for raiz, _, nomes in os.walk(dest):
+                for nome in nomes:
+                    if nome != 'scp.json':
+                        cam = os.path.join(raiz, nome)
+                        z.write(cam, os.path.relpath(cam, dest))
+        req = urllib.request.Request(v['Endereço'].rstrip('/') + '/api/importar-fechamento?ativar=1&id=' + urllib.parse.quote(fid), data=buf.getvalue(), method='POST',
+                                     headers={'X-Import-Token': v['REVISOR_IMPORT_TOKEN'], 'Content-Type': 'application/zip'})
+        with urllib.request.urlopen(req, timeout=300) as resp:
+            ret = json.loads(resp.read().decode('utf-8'))
+        r.update(ok=bool(ret.get('ok')), ativo=ret.get('ativo'))
+    except Exception as e:
+        r['erro'] = str(e)
+    os.makedirs(SAIDA, exist_ok=True)
+    json.dump(r, open(os.path.join(SAIDA, 'envio_cliente.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+    return r
 
 
 def recebido_em():
@@ -346,6 +385,13 @@ class H(BaseHTTPRequestHandler):
             if not fid or not empresa_permitida(fid.split('_')[0]):
                 return self._env(400, {'erro': 'fechamento de outra empresa'}) or True
             dest = os.path.join(HIST, fid)
+            atual_id = _json(os.path.join(SESSAO, 'meta.json'), {}).get('id')
+            # o que a cliente marcou neste mês continua valendo depois da carga
+            marcas = {}
+            for nome in ('corrigidos.json', 'canceladas.json'):
+                marcas[nome] = _json(os.path.join(dest, 'sessao', nome), {})
+                if atual_id == fid:
+                    marcas[nome].update(_json(os.path.join(SESSAO, nome), {}))
             shutil.rmtree(dest, ignore_errors=True); os.makedirs(dest, exist_ok=True)
             with zipfile.ZipFile(io.BytesIO(self._corpo())) as z:
                 for m in z.infolist():
@@ -356,7 +402,22 @@ class H(BaseHTTPRequestHandler):
                         os.makedirs(alvo, exist_ok=True); continue
                     os.makedirs(os.path.dirname(alvo), exist_ok=True)
                     open(alvo, 'wb').write(z.read(m))
-            return self._env(200, {'ok': True, 'id': fid, 'lista': [m['id'] for m in listar_fechamentos()]}) or True
+            for nome, v in marcas.items():
+                if v:
+                    alvo = os.path.join(dest, 'sessao', nome)
+                    json.dump({**_json(alvo, {}), **v}, open(alvo, 'w', encoding='utf-8'), ensure_ascii=False)
+            ativo = False
+            # ativar=1: a cliente já abre neste mês, salvo se estiver num mês mais novo
+            if q.get('ativar') and (not atual_id or atual_id == fid or atual_id.split('_')[-1] <= fid.split('_')[-1]):
+                if atual_id and atual_id != fid:
+                    arquivar()
+                shutil.rmtree(SESSAO, ignore_errors=True)
+                shutil.copytree(os.path.join(dest, 'sessao'), SESSAO)
+                os.makedirs(SAIDA, exist_ok=True)
+                shutil.copy(os.path.join(dest, 'resultado.json'), os.path.join(SAIDA, 'resultado.json'))
+                json.dump(_json(os.path.join(dest, 'meta.json'), {}), open(os.path.join(SESSAO, 'meta.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+                ativo = True
+            return self._env(200, {'ok': True, 'id': fid, 'ativo': ativo, 'lista': [m['id'] for m in listar_fechamentos()]}) or True
         if LOGIN_ON and u.path == '/sair':
             SESSOES.pop(_cookie_tok(self), None)
             self.send_response(303); self.send_header('Location', '/login'); self.send_header('Set-Cookie', 'rf_sessao=; Path=/; Max-Age=0')
@@ -446,6 +507,8 @@ class H(BaseHTTPRequestHandler):
                 nome = 'Revisao_fechamento_%s_%s.xlsx' % (res['empresa'].get('cnpj', ''), (res.get('competencia') or '').replace('-', ''))
                 return self._env(200, dados, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                                  {'Content-Disposition': 'attachment; filename="%s"' % nome})
+            if u.path == '/api/envio-cliente':
+                return self._env(200, _json(os.path.join(SAIDA, 'envio_cliente.json'), {}))
             if u.path == '/api/exportar-erros':
                 res = _json(os.path.join(SAIDA, 'resultado.json'), None)
                 if not res:
@@ -643,6 +706,13 @@ class H(BaseHTTPRequestHandler):
                 os.makedirs(SESSAO, exist_ok=True)
                 json.dump(notas, open(MANUAIS, 'w', encoding='utf-8'), ensure_ascii=False)
                 return self._env(200, {'notas': notas})
+            if u.path == '/api/enviar-cliente':
+                res = _json(os.path.join(SAIDA, 'resultado.json'), None)
+                if colaborador() or not res:
+                    return self._env(404, {'erro': 'Calcule antes de enviar.'})
+                arquivar()
+                r = enviar_cliente(res)
+                return self._env(200, r) if r else self._env(400, {'erro': 'Esta empresa não tem link de cliente configurado.'})
             if u.path == '/api/calcular':
                 b = json.loads(self._corpo() or b'{}')
                 cfg = {'cnpj': re.sub(r'\D', '', b.get('cnpj', '')), 'competencia': b.get('competencia', '')}
@@ -662,6 +732,8 @@ class H(BaseHTTPRequestHandler):
                 meta = arquivar(json.loads(json.dumps(res, default=list)))
                 if meta:
                     json.dump(meta, open(os.path.join(SESSAO, 'meta.json'), 'w', encoding='utf-8'), ensure_ascii=False)
+                    if _acesso_cliente((res.get('empresa') or {}).get('cnpj')):
+                        threading.Thread(target=enviar_cliente, args=(json.loads(json.dumps({'empresa': res['empresa'], 'competencia': res.get('competencia')})),), daemon=True).start()
                 return self._env(200, json.loads(json.dumps(res, ensure_ascii=False, default=list)))
             return self._env(404, {'erro': 'não encontrado'})
         except Exception as e:
