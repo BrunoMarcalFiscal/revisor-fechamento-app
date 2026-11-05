@@ -288,6 +288,39 @@ table.apu tr.cs-nf .t{font-weight:700;color:var(--suave)}
 .kpi .d{font-size:12px;color:var(--fraco)}
 .kpi.erro .v{color:var(--erro)} .kpi.alerta .v{color:var(--alerta)} .kpi.ok .v{color:var(--ok)}
 .kpi.erro{border-top:3px solid var(--erro)} .kpi.alerta{border-top:3px solid #E0A23B} .kpi.ok{border-top:3px solid #3E9B5B} .kpi.neutro{border-top:3px solid var(--navy)}
+.kpis.q4{grid-template-columns:repeat(4,1fr)}
+.kpi.sel{background:var(--palido);box-shadow:inset 0 -2px 0 var(--navy)}
+.abas-res{display:flex;align-items:center;gap:2px;border-bottom:1px solid var(--borda);margin-bottom:12px;overflow-x:auto}
+.abas-res button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;padding:8px 12px;font:inherit;font-weight:600;color:var(--suave);white-space:nowrap;cursor:pointer}
+.abas-res button.on{color:var(--navy);border-bottom-color:var(--navy)}
+.abas-res button .c{margin-left:6px;font-size:11px;font-weight:700;color:var(--fraco);font-variant-numeric:tabular-nums}
+.abas-res .fonte{margin-left:auto;padding:0 4px;font-size:12px;color:var(--fraco);white-space:nowrap}
+.res-nv{display:grid;grid-template-columns:260px minmax(0,1fr);gap:12px;align-items:start}
+.rail{position:sticky;top:8px;max-height:calc(100vh - 16px);overflow:auto}
+.rl{display:flex;justify-content:space-between;gap:8px;padding:7px 12px;border-bottom:1px solid var(--borda2);cursor:pointer;align-items:center}
+.rl:hover{background:#F7F9FC}
+.rl.sel{background:var(--palido)}
+.rl b{font-variant-numeric:tabular-nums;font-size:12px}
+.rl>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rl.cat{font-weight:600;color:var(--navy)}
+.rl.sub{padding-left:26px;font-size:12px;color:var(--suave)}
+.rl.sub .dot{margin-right:6px}
+.rl .gi{display:inline-block;width:12px;font-style:normal;transition:transform .1s}
+.rl .gi.on{transform:rotate(90deg)}
+.res-nv table.notas{table-layout:fixed;width:100%}
+.res-nv table.notas th:nth-child(1){width:84px}.res-nv table.notas th:nth-child(2){width:165px}.res-nv table.notas th:nth-child(4){width:92px}.res-nv table.notas th:nth-child(5){width:104px}.res-nv table.notas th:nth-child(6){width:205px}.res-nv table.notas th:nth-child(7){width:24px}
+.res-nv table.notas tr.n td{overflow:hidden;text-overflow:ellipsis}
+.res-nv table.notas .aps{flex-wrap:nowrap;overflow:hidden}
+.res-nv table.notas .aps .tag{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.res-nv table.notas .aps .tag.info{flex:none}
+.res-nv.sem-rail{grid-template-columns:minmax(0,1fr)}
+.res-nv.sem-rail .rail{display:none}
+.dobra-av{margin-bottom:10px;font-size:12px}
+.dobra-av summary{cursor:pointer;color:#8A5A00;font-weight:600;padding:2px 0}
+.mais-f{flex-basis:100%;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:8px;border-top:1px solid var(--borda2)}
+.filtros .busca{min-width:260px}
+.filtros .esp{flex:1}
+@media (max-width:900px){.res-nv{grid-template-columns:minmax(0,1fr)}.rail{position:static;max-height:none}.kpis.q4{grid-template-columns:1fr 1fr}.filtros .busca{min-width:0;flex:1}}
 .duas{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(300px,1fr);gap:12px;margin-bottom:14px}
 .painel .ph{padding:9px 12px;border-bottom:1px solid var(--borda);font-weight:700;color:var(--navy);display:flex;align-items:center;gap:8px}
 .painel .ph small{font-weight:500;color:var(--fraco)}
@@ -579,6 +612,8 @@ async function salvarObs(nk) {
 }
 let F = {mov:'', sit:'problema', cod:'', q:'', nat:'', cat:'', lim:150};
 const aberto = new Set();
+let VISAO = 'notas', AVISOS_ABERTOS = false, MAIS_FILTROS = false;
+const RAIL = new Set();
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -773,6 +808,7 @@ function abrirResultado() {
   $('#abaRes').disabled = false; $('#btnExport').disabled = false; $('#btnErros').disabled = false; $('#btnCliente').disabled = false; $('#abaApu').disabled = !(RES.apuracao && RES.apuracao.tem_planilha) || RES.tem_icms === false;
   $('#abaApu').title = RES.tem_icms === false ? 'Sem NF-e nem CT-e no mês: ICMS e IPI não se aplicam (só serviços).' : ''; $('#abaPnl').disabled = !RES.painel; $('#abaRel').disabled = false; $('#abaEst').disabled = COLAB(); $('#abaScp').disabled = COLAB(); desenharSituacao();
   $('#badgeRes').textContent = RES.resumo.com_erro || '';
+  VISAO = 'notas';
   desenharResultado(); mostrar('res');
 }
 
@@ -796,36 +832,49 @@ function desenharResultado(manterScroll) {
   if (RES.erros_leitura?.length) avisos.push(`${RES.erros_leitura.length} arquivo(s) não lidos: ${RES.erros_leitura.slice(0, 4).map(x => esc(x.arquivo)).join(', ')}${RES.erros_leitura.length > 4 ? '…' : ''}`);
   if (RES.locacoes?.alertas?.length) avisos.push(`Relatório de locações: ${RES.locacoes.alertas.slice(0, 6).map(esc).join(' ')}`);
   if (RES.pdf_sem_texto?.length) avisos.push(`PDF com páginas sem texto (escaneadas), não conferidas: ${RES.pdf_sem_texto.map(p => esc(p.arquivo) + ' pág. ' + p.paginas.slice(0, 8).join(', ')).join('; ')}`);
-  $('#secRes').innerHTML = `
-  ${avisos.map(a => `<div class="aviso">${a}</div>`).join('')}
-  <div class="painel kpis">
-    <div class="kpi neutro" onclick="filtrar({sit:'todas',mov:'',cod:''})"><div class="r">Notas analisadas</div><div class="v">${r.notas}</div><div class="d">${r.xml} XML · ${r.lancamentos} lançamentos</div></div>
-    <div class="kpi erro" onclick="filtrar({sit:'erro',cod:''})"><div class="r">Com erro</div><div class="v">${vivo.erro}</div><div class="d">precisam de ajuste no sistema</div></div>
-    <div class="kpi alerta" onclick="filtrar({sit:'alerta',cod:''})"><div class="r">Para conferir</div><div class="v">${vivo.alerta}</div><div class="d">podem estar certas, confira</div></div>
-    <div class="kpi corr" onclick="filtrar({sit:'corrigida',cod:''})"><div class="r">Resolvidas</div><div class="v">${vivo.corrigida}</div><div class="d">corrigidas ou justificadas</div></div>
-    <div class="kpi ok" onclick="filtrar({sit:'ok',cod:''})"><div class="r">Corretas</div><div class="v">${vivo.ok}</div><div class="d">${r.notas ? Math.round(100 * vivo.ok / r.notas) : 0}% do total</div></div>
-    <div class="kpi neutro" onclick="filtrar({sit:'erro',cod:''})"><div class="r">Valor nos erros pendentes</div><div class="v" style="font-size:20px">${rs(impacto)}</div><div class="d">soma das diferenças ainda abertas</div></div>
-  </div>
-  <div class="duas">
-    <div class="painel"><div class="ph">Por movimento <small>clique para filtrar as notas</small></div>
+  const kpi = (sit, cls, rot, v, d) => `<div class="kpi ${cls} ${F.sit === sit ? 'sel' : ''}" onclick="filtrar({sit: F.sit === '${sit}' ? 'problema' : '${sit}', cod: '', cat: ''})"><div class="r">${rot}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
+  const pendCli = pendenciasCliente().length, nDev = (RES.devolucoes || []).length + (RES.canceladas || []).length + (RES.pulos || []).length + (RES.inutilizadas || []).length;
+  const aba = (k, t, c) => `<button class="${VISAO === k ? 'on' : ''}" onclick="trocarVisao('${k}')">${t}${c ? `<span class="c">${c}</span>` : ''}</button>`;
+  const rail = () => {
+    const total = RES.notas.filter(n => ['erro', 'alerta'].includes(st(n))).length;
+    const cats = (RES.categorias || [['', '']]).map(([cat, rot]) => ({cat, rot, xs: ranking.filter(x => (x.categoria || '') === cat), n: RES.notas.filter(n => pend(n).some(a => a.categoria === cat)).length})).filter(c => c.xs.length).sort((a, b) => b.n - a.n);
+    return `<div class="painel rail"><div class="ph">Tipos de erro</div>
+      <div class="rl ${!F.cat && !F.cod ? 'sel' : ''}" onclick="filtrar({cat: '', cod: '', sit: 'problema'})"><span>Todos os problemas</span><b>${total}</b></div>
+      ${cats.map(c => { const on = RAIL.has(c.cat) || F.cat === c.cat || c.xs.some(x => x.cod === F.cod);
+        return `<div class="rl cat ${F.cat === c.cat && !F.cod ? 'sel' : ''}" onclick="railCat('${c.cat}')"><span><i class="gi ${on ? 'on' : ''}">›</i>${esc(c.rot)}</span><b>${c.n}</b></div>` +
+          (on ? c.xs.map(x => `<div class="rl sub ${F.cod === x.cod ? 'sel' : ''}" title="${esc(x.titulo)}" onclick="filtrar({cod:'${x.cod}',cat:'',sit:'todas'})"><span><span class="dot ${x.sev}"></span>${esc(x.titulo)}</span><b>${x.notas}</b></div>`).join('') : ''); }).join('') || '<div class="vazio-res">Nenhuma divergência encontrada.</div>'}
+    </div>`;
+  };
+  const visoes = {
+    notas: () => `<div class="res-nv" id="resNv">${rail()}<div class="painel" style="min-width:0">
+      <div class="filtros" id="filtros"></div><div id="loteBar"></div>
+      <div style="overflow:auto"><table class="notas"><thead><tr><th>Situação</th><th>Documento</th><th>Participante</th><th class="num">Valor XML</th><th class="num">Valor sistema</th><th>Apontamentos</th><th></th></tr></thead><tbody id="tbNotas"></tbody></table></div>
+      <div class="mais" id="mais"></div></div></div>`,
+    pend: () => painelPendencias() || '<div class="painel"><div class="vazio-res">Nada para pedir ao cliente neste fechamento.</div></div>',
+    mov: () => `<div class="painel"><div class="ph">Por movimento <small>clique em uma linha para ver as notas</small></div>
       <div style="overflow:auto"><table class="mov"><thead><tr><th>Movimento</th><th class="num">XML</th><th class="num">Lançadas</th><th class="num">Corretas</th><th class="num">Erro</th><th class="num">Conferir</th><th class="num">Corrigidas</th><th class="num">Não lançadas</th><th class="num">Sem XML</th><th class="num">Total XML</th><th class="num">Total sistema</th><th class="num">Diferença</th></tr></thead>
       <tbody>${Object.entries(m).map(([k, v]) => { const d = Math.round((v.valor_sis - v.valor_xml) * 100) / 100; const z = n => n ? n : `<span class="zero">0</span>`;
-        return `<tr class="l ${F.mov === k ? 'sel' : ''}" onclick="filtrar({mov:'${k}'})"><td><b>${esc(v.nome)}</b></td><td class="num">${z(v.xml)}</td><td class="num">${z(v.lancadas)}</td><td class="num">${v.ok ? `<b class="o">${v.ok}</b>` : z(0)}</td><td class="num">${v.erro ? `<b class="e">${v.erro}</b>` : z(0)}</td><td class="num">${v.alerta ? `<b class="a">${v.alerta}</b>` : z(0)}</td><td class="num">${v.corrigida ? `<b class="o">${v.corrigida}</b>` : z(0)}</td><td class="num">${v.nao_lancadas ? `<b class="e">${v.nao_lancadas}</b>` : z(0)}</td><td class="num">${v.sem_xml ? `<b class="a">${v.sem_xml}</b>` : z(0)}</td><td class="num">${brl(v.valor_xml)}</td><td class="num">${brl(v.valor_sis)}</td><td class="num dif ${d < 0 ? 'neg' : d > 0 ? 'pos' : ''}">${d ? brl(d) : '<span class="zero">0,00</span>'}</td></tr>`; }).join('')}</tbody></table></div></div>
-    <div class="painel"><div class="ph">Onde estão os erros <small>notas por tipo de apontamento</small></div>
-      <div class="rank">${ranking.length ? (RES.categorias || [['', '']]).map(([cat, rot]) => { const xs = ranking.filter(x => (x.categoria || '') === cat); if (!xs.length) return '';
-        const nn = RES.notas.filter(n => pend(n).some(a => a.categoria === cat)).length;
-        return `<div class="rk-cat ${F.cat === cat ? 'sel' : ''}" onclick="filtrar({cat:'${cat}',cod:'',sit:'problema'})"><span>${esc(rot)}</span><span>${nn} nota${nn !== 1 ? 's' : ''}</span></div>` + xs.map(x => `<div class="rk ${x.sev} ${F.cod === x.cod ? 'sel' : ''}" onclick="filtrar({cod:'${x.cod}',sit:'todas'})"><div class="t"><span class="tag ${x.sev}">${SEVR[x.sev]}</span><span title="${esc(x.titulo)}">${esc(x.titulo)}</span></div><div class="n">${x.notas}</div><div class="bar"><i style="width:${100 * x.notas / maxRank}%"></i></div></div>`).join(''); }).join('') : '<div class="vazio-res">Nenhuma divergência encontrada.</div>'}</div></div>
+        return `<tr class="l ${F.mov === k ? 'sel' : ''}" onclick="filtrar({mov:'${k}', sit:'todas'})"><td><b>${esc(v.nome)}</b></td><td class="num">${z(v.xml)}</td><td class="num">${z(v.lancadas)}</td><td class="num">${v.ok ? `<b class="o">${v.ok}</b>` : z(0)}</td><td class="num">${v.erro ? `<b class="e">${v.erro}</b>` : z(0)}</td><td class="num">${v.alerta ? `<b class="a">${v.alerta}</b>` : z(0)}</td><td class="num">${v.corrigida ? `<b class="o">${v.corrigida}</b>` : z(0)}</td><td class="num">${v.nao_lancadas ? `<b class="e">${v.nao_lancadas}</b>` : z(0)}</td><td class="num">${v.sem_xml ? `<b class="a">${v.sem_xml}</b>` : z(0)}</td><td class="num">${brl(v.valor_xml)}</td><td class="num">${brl(v.valor_sis)}</td><td class="num dif ${d < 0 ? 'neg' : d > 0 ? 'pos' : ''}">${d ? brl(d) : '<span class="zero">0,00</span>'}</td></tr>`; }).join('')}</tbody></table></div></div>`,
+    dev: () => painelDevolucoes(),
+  };
+  $('#secRes').innerHTML = `
+  ${avisos.length ? `<details class="dobra-av" ${AVISOS_ABERTOS ? 'open' : ''} ontoggle="AVISOS_ABERTOS=this.open"><summary>${avisos.length} aviso${avisos.length > 1 ? 's' : ''} sobre os arquivos lidos</summary>${avisos.map(a => `<div class="aviso">${a}</div>`).join('')}</details>` : ''}
+  <div class="painel kpis q4">
+    ${kpi('erro', 'erro', 'Com erro', vivo.erro, impacto ? rs(impacto) + ' em diferenças' : 'precisam de ajuste')}
+    ${kpi('alerta', 'alerta', 'Para conferir', vivo.alerta, 'podem estar certas')}
+    ${kpi('corrigida', 'corr', 'Resolvidas', vivo.corrigida, 'corrigidas ou justificadas')}
+    ${kpi('ok', 'ok', 'Corretas', vivo.ok, (r.notas ? Math.round(100 * vivo.ok / r.notas) : 0) + '% de ' + r.notas + ' notas')}
   </div>
-  ${painelPendencias()}
-  ${painelDevolucoes()}
-  <div class="painel">
-    <div class="filtros" id="filtros"></div>
-    <div id="loteBar"></div>
-    <div style="overflow:auto"><table class="notas"><thead><tr><th style="width:18px"></th><th>Situação</th><th>Movimento</th><th>Documento</th><th>Emissão</th><th>Participante</th><th class="num">Valor XML</th><th class="num">Valor sistema</th><th>Apontamentos</th><th></th></tr></thead><tbody id="tbNotas"></tbody></table></div>
-    <div class="mais" id="mais"></div>
-  </div>`;
+  <div class="abas-res">${aba('notas', 'Notas', vivo.erro + vivo.alerta)}${aba('pend', 'Pendências do cliente', pendCli)}${aba('mov', 'Por movimento')}${aba('dev', 'Devoluções e canceladas', nDev)}<span class="fonte">${r.xml} XML · ${r.lancamentos} lançamentos</span></div>
+  ${(visoes[VISAO] || visoes.notas)()}`;
   desenharNotas();
   if (manterScroll) window.scrollTo(0, y);
+}
+
+function trocarVisao(k) { VISAO = k; desenharResultado(true); }
+function railCat(cat) {
+  if (RAIL.has(cat) && F.cat === cat) { RAIL.delete(cat); filtrar({cat: '', cod: '', sit: 'problema'}); }
+  else { RAIL.add(cat); filtrar({cat, cod: '', sit: 'problema'}); }
 }
 
 function painelDevolucoes() {
@@ -868,6 +917,7 @@ function abrirNota(id) {
   if ($('#secRes').classList.contains('oculto')) mostrar('res');
   const n = RES.notas.find(x => x.id === id); if (!n) return;
   Object.assign(F, {mov:'', sit:'todas', cod:'', nat:'', cat:'', q: n.numero || '', lim:150}); aberto.add(id);
+  VISAO = 'notas';
   desenharResultado();
   const tr = [...document.querySelectorAll('tr.n')].find(t => t.getAttribute('onclick') === `abrir(${id})`);
   if (tr) window.scrollTo(0, tr.getBoundingClientRect().top + scrollY - 110);
@@ -877,8 +927,9 @@ function filtrar(o) {
   if ('mov' in o && o.mov === F.mov && Object.keys(o).length === 1) o.mov = '';
   if ('cod' in o && o.cod && o.cod === F.cod) { o.cod = ''; o.sit = 'problema'; }
   Object.assign(F, o, {lim:150});
-  desenharResultado();
-  document.getElementById('filtros').scrollIntoView({behavior:'smooth', block:'start'});
+  VISAO = 'notas';
+  desenharResultado(true);
+  document.getElementById('filtros').scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 function passa(n, ignorar) {
@@ -907,38 +958,43 @@ function passa(n, ignorar) {
 }
 
 function desenharNotas() {
-  const buscando = document.activeElement && document.activeElement.matches && document.activeElement.matches('#filtros input');
+  if (!$('#tbNotas')) return;
+  $('#resNv').classList.toggle('sem-rail', RES.notas.some(n => aberto.has(n.id) && passa(n)));  // nota aberta usa a largura toda
+  const buscando = document.activeElement && document.activeElement.matches && document.activeElement.matches('#filtros input.busca');
   const ns = RES.notas.filter(n => passa(n));
   const cont = (campo, val) => RES.notas.filter(n => passa(n, campo) && (campo === 'mov' ? (!val || n.mov === val) : true)).length;
   const sitN = s => RES.notas.filter(n => passa(n, 'sit') && (s === 'todas' || (s === 'problema' ? ['erro','alerta'].includes(st(n)) : s === 'ok' ? ['ok','cancelada'].includes(st(n)) : st(n) === s))).length;
   const movs = Object.keys(RES.movimentos);
+  const temFiltro = F.mov || F.cod || F.cat || F.nat || F.q || !['problema'].includes(F.sit);
   $('#filtros').innerHTML = `
-    <div class="seg">${[['problema','Com problema'],['erro','Erros'],['alerta','Conferir'],['corrigida','Resolvidas'],['ok','Corretas'],['todas','Todas']].map(([k, t]) => `<button class="${F.sit === k ? 'on' : ''}" onclick="filtrar({sit:'${k}'})">${t}<span class="c">${sitN(k)}</span></button>`).join('')}</div>
+    <input class="busca" placeholder="Buscar nº, fornecedor, CNPJ, chave" value="${esc(F.q)}" oninput="F.q=this.value;F.lim=150;clearTimeout(window._t);window._t=setTimeout(desenharNotas,200)">
+    <span class="lim">${ns.length} nota${ns.length !== 1 ? 's' : ''}</span>
+    <span class="esp"></span>
+    ${temFiltro ? `<button class="lnk" onclick="filtrar({mov:'',cod:'',cat:'',nat:'',q:'',sit:'problema'})">Limpar filtros</button>` : ''}
+    <button class="btn peq ${MAIS_FILTROS ? 'pri' : ''}" onclick="MAIS_FILTROS=!MAIS_FILTROS;desenharNotas()">Mais filtros</button>
+    ${MAIS_FILTROS ? `<div class="mais-f">
+    <div class="seg">${[['problema','Com problema'],['todas','Todas']].map(([k, t]) => `<button class="${F.sit === k ? 'on' : ''}" onclick="filtrar({sit:'${k}'})">${t}<span class="c">${sitN(k)}</span></button>`).join('')}</div>
     <select onchange="filtrar({mov:this.value})"><option value="">Todos os movimentos (${cont('mov', '')})</option>${movs.map(k => `<option value="${k}" ${F.mov === k ? 'selected' : ''}>${MOVS[k]} (${cont('mov', k)})</option>`).join('')}</select>
     <select onchange="filtrar({cod:this.value})"><option value="">Todos os apontamentos</option>${RES.ranking.map(x => `<option value="${x.cod}" ${F.cod === x.cod ? 'selected' : ''}>${esc(x.titulo)} (${x.notas})</option>`).join('')}</select>
     <select onchange="filtrar({cat:this.value,cod:''})"><option value="">Todas as categorias</option>${(RES.categorias || []).filter(([c]) => RES.notas.some(n => n.aponts.some(a => a.categoria === c && SEV_AP(a)))).map(([c, r]) => `<option value="${c}" ${F.cat === c ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select>
     <select onchange="filtrar({nat:this.value})">${[['','Todos os tipos de documento'],['normal','Normais'],['dev','Devoluções'],['cancelada','Canceladas'],['inut','Inutilizadas e numeração'],['comp','Complementares/ajuste']].map(([k, t]) => `<option value="${k}" ${F.nat === k ? 'selected' : ''}>${t} (${RES.notas.filter(n => passa(n, 'nat') && (!k || ({dev:['dev_venda','dev_compra','dev_compra_forn'],cancelada:['cancelada'],inut:['inutilizada','numeracao'],comp:['complementar','ajuste'],normal:['normal']}[k]).includes(n.natureza))).length})</option>`).join('')}</select>
     <button class="btn peq ${F.nat === 'cancelada' ? 'pri' : ''}" onclick="filtrar({nat: F.nat === 'cancelada' ? '' : 'cancelada', sit: 'todas', cod: '', cat: ''})">Só canceladas (${RES.notas.filter(n => n.natureza === 'cancelada' || n.aponts.some(a => a.cod === 'CANCELADA_SO_NO_SISTEMA')).length})</button>
-    <input placeholder="Buscar nº, fornecedor, CNPJ, chave" value="${esc(F.q)}" oninput="F.q=this.value;F.lim=150;clearTimeout(window._t);window._t=setTimeout(desenharNotas,200)">
-    <span class="lim">${ns.length} nota${ns.length !== 1 ? 's' : ''}</span>`;
+    </div>` : ''}`;
   const corpo = ns.slice(0, F.lim).map(n => linhaNota(n) + (aberto.has(n.id) ? detalhe(n) : '')).join('');
   $('#loteBar').innerHTML = barraLote();
-  $('#tbNotas').innerHTML = corpo || `<tr><td colspan="10" class="vazio-res">Nenhuma nota neste filtro.</td></tr>`;
+  $('#tbNotas').innerHTML = corpo || `<tr><td colspan="7" class="vazio-res">Nenhuma nota neste filtro.</td></tr>`;
   $('#mais').innerHTML = ns.length > F.lim ? `<button class="btn" onclick="F.lim+=300;desenharNotas()">Mostrar mais (${ns.length - F.lim} restantes)</button>` : '';
-  if (buscando) { const i = $('#filtros input'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+  if (buscando) { const i = $('#filtros input.busca'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
 }
 
 function linhaNota(n) {
   const aps = pend(n);
   const s = st(n);
-  const vis = aps.slice(0, 3).map(a => `<span class="tag ${a.sev}" title="${esc(a.detalhe)}">${esc(a.titulo)}</span>`).join('') + (aps.length > 3 ? `<span class="tag info">+${aps.length - 3}</span>` : '');
+  const vis = aps.slice(0, 1).map(a => `<span class="tag ${a.sev}" title="${esc(a.detalhe)}">${esc(a.titulo)}</span>`).join('') + (aps.length > 1 ? `<span class="tag info" title="${esc(aps.slice(1).map(a => a.titulo).join('; '))}">+${aps.length - 1}</span>` : '');
   const dif = n.valor_xml != null && n.valor_sis != null && Math.abs(n.valor_xml - n.valor_sis) > 0.05;
   return `<tr class="n ${aberto.has(n.id) ? 'aberta' : ''}" onclick="abrir(${n.id})">
-    <td><span class="dot ${s}"></span></td>
     <td><span class="tag ${s}">${SEVR[s]}</span></td>
-    <td>${esc(MOVS[n.mov] || n.mov)}</td>
-    <td style="white-space:nowrap"><b>${esc(n.tipo)} ${esc(n.numero || 's/n')}</b>${n.serie ? `<span style="color:var(--fraco)"> / ${esc(n.serie)}</span>` : ''}${n.natureza && n.natureza !== 'normal' ? `<br><span class="nat ${n.natureza}" style="margin-left:0">${esc(n.natureza_rot)}</span>` : ''}</td>
-    <td style="white-space:nowrap">${dt(n.emissao)}</td>
+    <td style="white-space:nowrap"><b>${esc(n.tipo)} ${esc(n.numero || 's/n')}</b>${n.serie ? `<span style="color:var(--fraco)"> / ${esc(n.serie)}</span>` : ''}<span class="cn" style="display:block">${esc(MOVS[n.mov] || n.mov)} · ${dt(n.emissao)}</span>${n.natureza && n.natureza !== 'normal' ? `<span class="nat ${n.natureza}" style="margin-left:0">${esc(n.natureza_rot)}</span>` : ''}</td>
     <td class="part"><span class="nm" title="${esc(n.part_nome)}">${esc(n.part_nome || '')}</span><span class="cn">${esc(cnpjFmt(n.part_cnpj))}${n.part_uf ? ' · ' + esc(n.part_uf) : ''}</span></td>
     <td class="num">${n.valor_xml != null ? brl(n.valor_xml) : '<span class="zero">sem XML</span>'}</td>
     <td class="num" style="${dif ? 'color:var(--erro);font-weight:700' : ''}">${n.valor_sis != null ? brl(n.valor_sis) : '<span class="zero">não lançada</span>'}</td>
@@ -947,6 +1003,7 @@ function linhaNota(n) {
 }
 
 function abrir(id) { aberto.has(id) ? aberto.delete(id) : aberto.add(id); desenharNotas(); }
+
 
 const COLS_NF = [['cfop','CFOP'],['cst','CST'],['vc','Valor'],['bc','Base ICMS'],['aliq','Alíq.'],['icms','ICMS'],['st','ICMS-ST'],['ipi','IPI'],['pis','PIS'],['cofins','COFINS'],['cst_pis','CST PIS']];
 const COLS_SV = [['servico','Item LC'],['vc','Valor serviço'],['base_iss','Base ISS'],['iss','ISS'],['aliq_iss','Alíq. ISS'],['iss_retido','ISS retido'],['irrf','IRRF'],['csll','CSLL'],['inss','INSS'],['pis_ret','PIS ret.'],['cofins_ret','COFINS ret.'],['vliq','Líquido']];
@@ -992,7 +1049,7 @@ function detalhe(n) {
       return `<span class="p ${s}" title="${esc(c.obs || {ok:'conferido, sem divergência', erro:'com erro', alerta:'para conferir', resolvido:'resolvido'}[s])}">${ic} ${esc(c.rot)}${s === 'nao' ? ' <span style="font-weight:400">(' + esc(c.obs) + ')</span>' : ''}</span>`; }).join('')}</div>` : '';
   const ob = resol('obs:' + n.k);
   const obs = n.k ? `<div class="obs-nota" onclick="event.stopPropagation()"><label>Observação da nota</label><textarea id="obs-${idk(n.k)}" placeholder="Anotação para a equipe ou para o cliente (opcional)">${esc(ob ? ob.obs : '')}</textarea><button class="btn peq" id="obsb-${idk(n.k)}" onclick="event.stopPropagation();salvarObs(${esc(JSON.stringify(n.k))})">Salvar observação</button></div>` : '';
-  return `<tr class="det"><td colspan="10"><div class="in"><div class="meta">${meta}</div>${infos.map(i => `<div class="aviso" style="background:var(--palido);border-color:#C9D8EE;color:var(--navy)">${esc(i.titulo)}${i.detalhe ? ': ' + esc(i.detalhe) : ''}</div>`).join('')}${ck}${lista}${obs}${comparativo(n)}</div></td></tr>`;
+  return `<tr class="det"><td colspan="7"><div class="in"><div class="meta">${meta}</div>${infos.map(i => `<div class="aviso" style="background:var(--palido);border-color:#C9D8EE;color:var(--navy)">${esc(i.titulo)}${i.detalhe ? ': ' + esc(i.detalhe) : ''}</div>`).join('')}${ck}${lista}${obs}${comparativo(n)}</div></td></tr>`;
 }
 
 function comparativo(n) {
