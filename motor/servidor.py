@@ -133,6 +133,9 @@ def enviar_cliente(res):
                     if nome != 'scp.json':
                         cam = os.path.join(raiz, nome)
                         z.write(cam, os.path.relpath(cam, dest))
+            arq_rm = os.path.join(SAIDA, 'remover_marcas_%s.json' % fid)
+            if os.path.exists(arq_rm):
+                z.write(arq_rm, 'remover_marcas.json')
         req = urllib.request.Request(v['Endereço'].rstrip('/') + '/api/importar-fechamento?ativar=1&id=' + urllib.parse.quote(fid), data=buf.getvalue(), method='POST',
                                      headers={'X-Import-Token': v['REVISOR_IMPORT_TOKEN'], 'Content-Type': 'application/zip'})
         for tentativa in range(4):  # o link fica fora do ar por instantes quando ele é publicado de novo
@@ -145,6 +148,8 @@ def enviar_cliente(res):
                     raise
                 time.sleep(30)
         r.update(ok=bool(ret.get('ok')), ativo=ret.get('ativo'))
+        if r['ok'] and os.path.exists(arq_rm):
+            os.remove(arq_rm)
     except Exception as e:
         r['erro'] = str(e)
     os.makedirs(SAIDA, exist_ok=True)
@@ -404,6 +409,11 @@ class H(BaseHTTPRequestHandler):
                 for m in z.infolist():
                     alvo = os.path.abspath(os.path.join(dest, m.filename))
                     if not alvo.startswith(os.path.abspath(dest) + os.sep) or os.path.basename(alvo) == 'scp.json':
+                        continue
+                    if m.filename == 'remover_marcas.json':  # marcações que o escritório zerou: saem, as da cliente ficam
+                        for k in json.loads(z.read(m).decode('utf-8')):
+                            for v in marcas.values():
+                                v.pop(k, None)
                         continue
                     if m.is_dir():
                         os.makedirs(alvo, exist_ok=True); continue
