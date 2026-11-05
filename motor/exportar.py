@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """Exporta o resultado para Excel: Apontamentos (uma linha por correção), Notas (uma por nota) e Resumo."""
-import io, re
+import io, os, re, urllib.parse, zipfile
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.hyperlink import Hyperlink
 
 NAVY = '212E50'
 SEV = {'erro': ('Erro', 'FBE3E1', '9B1C1C'), 'alerta': ('Conferir', 'FDF1D8', '8A5A00'), 'ok': ('Correta', 'E3F1E6', '1E6B35'),
@@ -215,3 +216,142 @@ def _aba_painel(wb, res, titulo):
     lin('Fornecedores', sn['qtd']); lin('Comprado deles', sn['valor']); lin('% das compras', sn['pct_compras']); lin('Crédito de ICMS destacado', sn['credito_destacado'])
     for x in sn['top']:
         lin(x['nome'], x['valor'], x.get('cnpj', ''), x.get('pct'), x.get('notas', ''))
+
+
+# ---------- relatório de erros: Excel por grupo + XML das notas (zip) ----------
+COLS_ERRO = [('Situação', 11), ('Movimento', 17), ('Documento', 9), ('Número', 10), ('Série', 6), ('Emissão', 11), ('CNPJ participante', 17), ('Participante', 30),
+             ('O que está errado', 50), ('Por que é erro', 44), ('Na nota (XML)', 20), ('No sistema', 20), ('Como corrigir', 40), ('Também (consequências)', 34),
+             ('Valor envolvido', 13), ('Onde está na planilha', 30), ('XML para consulta', 14), ('Chave de acesso', 46), ('Resolução', 11), ('Justificativa / observação', 34)]
+ROT_RES = {'corrigido': 'Corrigido', 'justificado': 'Justificado'}
+
+
+def _nome_aba(titulo, usados):
+    """Nome de aba válido no Excel: até 31 caracteres, sem símbolos proibidos, cortado no fim de palavra e sem repetir."""
+    t = re.sub(r'[\[\]:*?/\\\']', ' ', titulo).strip()
+    if len(t) > 31:
+        t = t[:31].rsplit(' ', 1)[0].rstrip(' ,;-')
+    nome, i = t, 2
+    while nome.lower() in usados:
+        suf = ' %d' % i
+        nome, i = t[:31 - len(suf)] + suf, i + 1
+    usados.add(nome.lower())
+    return nome
+
+
+def _arquivo_da_nota(n, sessao):
+    """Acha o XML/PDF da nota na sessão: primeiro no quadro do próprio movimento, depois nos outros. Devolve (caminho, caminho no zip)."""
+    nome = os.path.basename(n.get('arquivo') or n.get('pdf') or '')
+    if not nome:
+        return None, None
+    for d in [n.get('mov')] + ['entrada', 'saida', 'frete', 'prestado', 'tomado', 'diversos']:
+        cam = os.path.join(sessao, d or '', nome)
+        if d and os.path.isfile(cam):
+            return cam, 'XML/%s/%s' % (d, nome)
+    return None, None
+
+
+def _linha_erro(ws, n, a, r, link, antes=()):
+    """Uma linha de erro; `antes` são colunas extras na frente (o grupo, no Consolidado)."""
+    from .consolidar import FUNDAMENTO
+    ws.append(list(antes) + ['', MOV.get(n['mov'], n['mov']), n['tipo'], n['numero'], n.get('serie', ''), _d(n.get('emissao', '')), n.get('part_cnpj', ''), n.get('part_nome', ''),
+               a['detalhe'], a.get('fundamento') or FUNDAMENTO.get(a['cod'], ''), a['xml'], a['sis'], a['correcao'], '; '.join(a.get('tambem') or []), a['valor'] or None,
+               n.get('ref_planilha') or n.get('pdf') or '', 'Abrir XML' if link else 'Sem XML', n.get('chave', ''), ROT_RES.get(r['status'], '') if r else 'Pendente', r['obs'] if r else ''])
+    lin, d = ws.max_row, len(antes)
+    cel = ws.cell(row=lin, column=1 + d)
+    _sev(cel, 'ok' if r else a['sev'])
+    if r:
+        cel.value = ROT_RES.get(r['status'], 'Resolvido')
+    ws.cell(row=lin, column=15 + d).number_format = '#,##0.00'
+    for c in (8, 9, 10, 11, 12, 13, 14, 16, 20):
+        ws.cell(row=lin, column=c + d).alignment = Alignment(wrap_text=True, vertical='top')
+    if link:
+        x = ws.cell(row=lin, column=17 + d)
+        x.hyperlink = urllib.parse.quote(link, safe='/')
+        x.font = Font(color='2F5CA6', underline='single')
+
+
+def erros_zip(res, corrigidos=None, sessao=''):
+    """Zip com o Excel dos erros (Resumo, Consolidado e uma aba por grupo) e os XML das notas apontadas, ligados por link em cada linha."""
+    corrigidos = corrigidos or {}
+    from .consolidar import CAT_ROT, FUNDAMENTO
+    grupos, arquivos = {}, {}
+    for n in res['notas']:
+        cam, zipado = _arquivo_da_nota(n, sessao)
+        for a in n['aponts']:
+            if a['sev'] not in ('erro', 'alerta'):
+                continue
+            if cam:
+                arquivos[zipado] = cam
+            g = grupos.setdefault(a['cod'], {'cod': a['cod'], 'titulo': a['titulo'], 'sev': a['sev'], 'cat': CAT_ROT.get(a.get('categoria'), ''),
+                                             'expl': a.get('fundamento') or FUNDAMENTO.get(a['cod'], ''), 'itens': []})
+            if a['sev'] == 'erro':
+                g['sev'] = 'erro'
+            g['itens'].append((n, a, _res(corrigidos.get(a.get('k', ''))), zipado))
+    ordem = sorted(grupos.values(), key=lambda g: (g['sev'] != 'erro', -len(g['itens']), g['titulo']))
+
+    wb = openpyxl.Workbook()
+    emp = res.get('empresa', {})
+    titulo = '%s  |  CNPJ %s  |  Competência %s  |  gerado em %s' % (emp.get('nome', ''), emp.get('cnpj', ''), res.get('competencia', ''), res.get('gerado_em', ''))
+    usados = {'resumo', 'consolidado'}
+    for g in ordem:
+        g['aba'] = _nome_aba(g['titulo'], usados)
+
+    ws = wb.active
+    ws.title = 'Resumo'
+    ws.append(['Relatório de erros do fechamento']); ws['A1'].font = Font(bold=True, size=14, color=NAVY)
+    ws.append([titulo]); ws['A2'].font = Font(color=NAVY)
+    ws.append(['Extraia o .zip antes de abrir este Excel: os links "Abrir XML" só funcionam com a pasta XML ao lado do arquivo.']); ws['A3'].font = Font(italic=True, color='8A5A00')
+    ws.append([])
+    _cab(ws, ['Grupo de erro (clique para abrir)', 'Categoria', 'Situação', 'Ocorrências', 'Notas', 'Pendentes', 'Valor envolvido', 'O que significa'], [46, 22, 11, 12, 8, 10, 15, 80])
+    for g in ordem:
+        pend = sum(1 for _, _, r, _ in g['itens'] if not r)
+        ws.append([g['titulo'], g['cat'], '', len(g['itens']), len({n['id'] for n, _, _, _ in g['itens']}), pend, round(sum(a['valor'] or 0 for _, a, _, _ in g['itens']), 2) or None, g['expl']])
+        lin = ws.max_row
+        cel = ws.cell(row=lin, column=1)
+        cel.hyperlink = Hyperlink(ref=cel.coordinate, location="'%s'!A1" % g['aba'])
+        cel.font = Font(color='2F5CA6', underline='single')
+        _sev(ws.cell(row=lin, column=3), g['sev'])
+        ws.cell(row=lin, column=7).number_format = '#,##0.00'
+        ws.cell(row=lin, column=8).alignment = Alignment(wrap_text=True, vertical='top')
+    prim, ult = 6, ws.max_row
+    ws.append(['Total', '', '', '=SUM(D%d:D%d)' % (prim, ult), '', '=SUM(F%d:F%d)' % (prim, ult)])
+    for c in range(1, 9):
+        ws.cell(row=ws.max_row, column=c).font = Font(bold=True, color=NAVY)
+
+    wc = wb.create_sheet('Consolidado')
+    wc.append([titulo]); wc['A1'].font = Font(bold=True, size=12, color=NAVY)
+    _cab(wc, ['Grupo de erro'] + [c for c, _ in COLS_ERRO], [34] + [l for _, l in COLS_ERRO])
+    for g in ordem:
+        for n, a, r, link in g['itens']:
+            _linha_erro(wc, n, a, r, link, antes=[g['titulo']])
+            lin = wc.max_row
+            cel = wc.cell(row=lin, column=1)
+            cel.hyperlink = Hyperlink(ref=cel.coordinate, location="'%s'!A1" % g['aba'])
+            cel.font = Font(color='2F5CA6', underline='single')
+            cel.alignment = Alignment(wrap_text=True, vertical='top')
+
+    for g in ordem:
+        wg = wb.create_sheet(g['aba'])
+        wg.append([g['titulo']]); wg['A1'].font = Font(bold=True, size=14, color=NAVY)
+        wg.append([titulo]); wg['A2'].font = Font(color=NAVY)
+        wg.append(['O que significa: ' + (g['expl'] or 'veja o detalhe em cada linha.')])
+        wg.merge_cells('A3:I3'); wg['A3'].alignment = Alignment(wrap_text=True, vertical='top'); wg.row_dimensions[3].height = 34
+        volta = wg.cell(row=4, column=1, value='‹ Voltar ao Resumo')
+        volta.hyperlink = Hyperlink(ref=volta.coordinate, location="'Resumo'!A1"); volta.font = Font(color='2F5CA6', underline='single')
+        wg.append([])
+        _cab(wg, [c for c, _ in COLS_ERRO], [l for _, l in COLS_ERRO])
+        for n, a, r, link in g['itens']:
+            _linha_erro(wg, n, a, r, link)
+        ult_g = wg.max_row
+        wg.auto_filter.ref = 'A6:%s%d' % (get_column_letter(len(COLS_ERRO)), ult_g)
+    wc.auto_filter.ref = 'A2:%s%d' % (get_column_letter(len(COLS_ERRO) + 1), wc.max_row)
+
+    xbuf = io.BytesIO()
+    wb.save(xbuf)
+    comp = (res.get('competencia') or '').replace('-', '')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr('Erros_fechamento_%s_%s.xlsx' % (emp.get('cnpj', ''), comp), xbuf.getvalue())
+        for zipado, cam in sorted(arquivos.items()):
+            z.write(cam, zipado)
+    return buf.getvalue()

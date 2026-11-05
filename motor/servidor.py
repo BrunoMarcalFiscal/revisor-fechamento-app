@@ -446,6 +446,13 @@ class H(BaseHTTPRequestHandler):
                 nome = 'Revisao_fechamento_%s_%s.xlsx' % (res['empresa'].get('cnpj', ''), (res.get('competencia') or '').replace('-', ''))
                 return self._env(200, dados, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                                  {'Content-Disposition': 'attachment; filename="%s"' % nome})
+            if u.path == '/api/exportar-erros':
+                res = _json(os.path.join(SAIDA, 'resultado.json'), None)
+                if not res:
+                    return self._env(404, {'erro': 'Calcule antes de exportar.'})
+                dados = exportar.erros_zip(res, _json(CORRIGIDOS, {}), SESSAO)
+                nome = 'Erros_fechamento_%s_%s.zip' % (res['empresa'].get('cnpj', ''), (res.get('competencia') or '').replace('-', ''))
+                return self._env(200, dados, 'application/zip', {'Content-Disposition': 'attachment; filename="%s"' % nome})
             return self._env(404, {'erro': 'não encontrado'})
         except Exception as e:
             traceback.print_exc()

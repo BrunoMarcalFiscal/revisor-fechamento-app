@@ -76,6 +76,19 @@ FUNDAMENTO = {
     'CANCELADA_LANCADA': 'Nota cancelada não gera crédito nem débito; no livro entra sem valor (situação cancelada).',
     'INUTILIZADA_LANCADA': 'Número inutilizado não tem operação; não pode estar no livro com valor.',
     'NUMERO_PULADO': 'Todo número da série tem de ter nota autorizada, cancelada ou inutilizada.',
+    'ALIQ_ICMS': 'A alíquota escriturada tem de ser a mesma destacada na nota; alíquota errada muda o imposto apurado.',
+    'BASE_ICMS': 'A base de cálculo escriturada tem de ser a mesma da nota; base errada muda o imposto apurado.',
+    'ICMS_SAIDA': 'O ICMS debitado no livro tem de ser o destacado no documento emitido; diferença muda o saldo da apuração.',
+    'ICMS_ENTRADA_PROPRIA': 'Na nota de entrada emitida pela própria empresa, o ICMS do livro tem de ser o destacado nela.',
+    'CREDITO_MENOR': 'Crédito lançado abaixo do destacado pode estar deixando imposto a recuperar para trás, se a operação dá direito ao crédito.',
+    'DATA_EMISSAO': 'A data de emissão do livro tem de ser a do documento; data errada atrapalha o cruzamento com o XML e pode mudar o período.',
+    'DESTINO_ATIVO': 'O item parece bem durável pela descrição, NCM e valor. Se ficar na empresa como ativo, muda o CFOP e o crédito, que passa a ser pelo CIAP. É um indício: confirme o uso do bem.',
+    'CANCELADA_SO_NO_SISTEMA': 'O cancelamento só está provado com o evento da nota. Sem esse XML, o sistema diz cancelada e o documento segue autorizado, e a nota pode voltar nos cruzamentos do Fisco.',
+    'NFSE_REPETIDA': 'Duas NFS-e iguais costumam ser uma cancelada e reemitida; a NFS-e nacional não muda ao cancelar, então é preciso confirmar no Portal para não contar a mesma operação duas vezes.',
+    'DEV_SEM_REF': 'Sem a nota de origem referenciada não dá para conferir itens, quantidade e imposto da devolução contra a operação original.',
+    'DEV_FORN_NAO_LANCADA': 'Quando o fornecedor emite a nota de entrada da devolução, a compra e a devolução precisam estar coerentes no livro.',
+    'DEVOLVIDA_INTEGRAL': 'Compra devolvida por inteiro tem efeito zero, mas se uma nota for lançada a outra também precisa ser.',
+    'CASOU_SO_NUMERO': 'Sem CNPJ nem chave na planilha, o vínculo é só pelo número, e notas de fornecedores diferentes podem ter o mesmo número.',
 }
 
 ICMS_RAIZ = {'ICMS_SAIDA', 'ICMS_ENTRADA_PROPRIA', 'CREDITO_MAIOR', 'CREDITO_MENOR', 'CREDITO_DEV_VENDA', 'CREDITO_USO_CONSUMO', 'CREDITO_NAO_TOMADO'}

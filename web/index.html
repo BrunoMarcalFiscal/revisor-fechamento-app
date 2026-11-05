@@ -499,6 +499,7 @@ label.chk{display:flex!important;flex-direction:row!important;align-items:center
   <div class="side-pe">
     <button onclick="abrirHistorico()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Fechamentos</span></button>
     <button id="btnExport" onclick="location.href='/api/exportar'" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M5 21h14"/></svg><span>Exportar Excel</span></button>
+    <button id="btnErros" title="Baixar .zip com o Excel dos erros por grupo e os XML das notas" onclick="location.href='/api/exportar-erros'" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 2.4 17.6A2 2 0 0 0 4.1 20.6h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Erros + XML</span></button>
     <button onclick="novo()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>Novo fechamento</span></button>
   </div>
 </aside>
@@ -719,7 +720,7 @@ async function novo() {
   if (!confirm('Começar um fechamento novo? O fechamento atual fica guardado em "Fechamentos" e a tela é limpa.')) return;
   EST = await api('/api/limpar?card=tudo', {method:'POST'}); PL = await api('/api/planilha'); RES = null; COR = {};
   $('#inCnpj').value = ''; $('#inComp').value = ''; $('#topEmp').innerHTML = '<div class="emp-vz">Nenhum fechamento aberto</div>'; $('#badgeRes').textContent = ''; MAN = []; MAN_ED = null; desenharManuais();
-  $('#abaRes').disabled = true; $('#abaApu').disabled = true; $('#abaPnl').disabled = true; $('#abaRel').disabled = true; $('#abaEst').disabled = true; $('#abaScp').disabled = true; APU = null; desenharSituacao(); $('#btnExport').disabled = true; mostrar('docs'); desenharCards(); msg('');
+  $('#abaRes').disabled = true; $('#abaApu').disabled = true; $('#abaPnl').disabled = true; $('#abaRel').disabled = true; $('#abaEst').disabled = true; $('#abaScp').disabled = true; APU = null; desenharSituacao(); $('#btnExport').disabled = true; $('#btnErros').disabled = true; mostrar('docs'); desenharCards(); msg('');
 }
 function msg(t, erro) { const m = $('#msg'); m.textContent = t; m.className = 'msg' + (erro ? ' erro' : ''); }
 
@@ -764,7 +765,7 @@ function abrirResultado() {
   if (!RES || !RES.notas) return;
   const e = RES.empresa || {};
   $('#topEmp').innerHTML = `<b title="${esc(e.nome || '')}">${esc(e.nome || 'Empresa')}</b><span>CNPJ ${esc(cnpjFmt(e.cnpj))}${e.uf ? ' · ' + esc(e.uf) : ''}</span><span class="emp-comp">Competência ${esc((RES.competencia || '').split('-').reverse().join('/'))}</span>`;
-  $('#abaRes').disabled = false; $('#btnExport').disabled = false; $('#abaApu').disabled = !(RES.apuracao && RES.apuracao.tem_planilha) || RES.tem_icms === false;
+  $('#abaRes').disabled = false; $('#btnExport').disabled = false; $('#btnErros').disabled = false; $('#abaApu').disabled = !(RES.apuracao && RES.apuracao.tem_planilha) || RES.tem_icms === false;
   $('#abaApu').title = RES.tem_icms === false ? 'Sem NF-e nem CT-e no mês: ICMS e IPI não se aplicam (só serviços).' : ''; $('#abaPnl').disabled = !RES.painel; $('#abaRel').disabled = false; $('#abaEst').disabled = COLAB(); $('#abaScp').disabled = COLAB(); desenharSituacao();
   $('#badgeRes').textContent = RES.resumo.com_erro || '';
   desenharResultado(); mostrar('res');
