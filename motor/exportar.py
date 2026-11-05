@@ -5,6 +5,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.hyperlink import Hyperlink
+from . import espelho
 
 NAVY = '212E50'
 SEV = {'erro': ('Erro', 'FBE3E1', '9B1C1C'), 'alerta': ('Conferir', 'FDF1D8', '8A5A00'), 'ok': ('Correta', 'E3F1E6', '1E6B35'),
@@ -221,7 +222,7 @@ def _aba_painel(wb, res, titulo):
 # ---------- relatório de erros: Excel por grupo + XML das notas (zip) ----------
 COLS_ERRO = [('Situação', 11), ('Movimento', 17), ('Documento', 9), ('Número', 10), ('Série', 6), ('Emissão', 11), ('CNPJ participante', 17), ('Participante', 30),
              ('O que está errado', 50), ('Por que é erro', 44), ('Na nota (XML)', 20), ('No sistema', 20), ('Como corrigir', 40), ('Também (consequências)', 34),
-             ('Valor envolvido', 13), ('Onde está na planilha', 30), ('XML para consulta', 14), ('Chave de acesso', 46), ('Resolução', 11), ('Justificativa / observação', 34)]
+             ('Valor envolvido', 13), ('Onde está na planilha', 30), ('XML para consulta', 14), ('PDF para validação', 14), ('Chave de acesso', 46), ('Resolução', 11), ('Justificativa / observação', 34)]
 ROT_RES = {'corrigido': 'Corrigido', 'justificado': 'Justificado'}
 
 
@@ -250,31 +251,35 @@ def _arquivo_da_nota(n, sessao):
     return None, None
 
 
-def _linha_erro(ws, n, a, r, link, antes=()):
+def _linha_erro(ws, n, a, r, link, antes=(), pdf=None):
     """Uma linha de erro; `antes` são colunas extras na frente (o grupo, no Consolidado)."""
     from .consolidar import FUNDAMENTO
     ws.append(list(antes) + ['', MOV.get(n['mov'], n['mov']), n['tipo'], n['numero'], n.get('serie', ''), _d(n.get('emissao', '')), n.get('part_cnpj', ''), n.get('part_nome', ''),
                a['detalhe'], a.get('fundamento') or FUNDAMENTO.get(a['cod'], ''), a['xml'], a['sis'], a['correcao'], '; '.join(a.get('tambem') or []), a['valor'] or None,
-               n.get('ref_planilha') or n.get('pdf') or '', 'Abrir XML' if link else 'Sem XML', n.get('chave', ''), ROT_RES.get(r['status'], '') if r else 'Pendente', r['obs'] if r else ''])
+               n.get('ref_planilha') or n.get('pdf') or '', 'Abrir XML' if link else 'Sem XML', 'Abrir PDF' if pdf else 'Sem PDF', n.get('chave', ''), ROT_RES.get(r['status'], '') if r else 'Pendente', r['obs'] if r else ''])
     lin, d = ws.max_row, len(antes)
     cel = ws.cell(row=lin, column=1 + d)
     _sev(cel, 'ok' if r else a['sev'])
     if r:
         cel.value = ROT_RES.get(r['status'], 'Resolvido')
     ws.cell(row=lin, column=15 + d).number_format = '#,##0.00'
-    for c in (8, 9, 10, 11, 12, 13, 14, 16, 20):
+    for c in (8, 9, 10, 11, 12, 13, 14, 16, 21):
         ws.cell(row=lin, column=c + d).alignment = Alignment(wrap_text=True, vertical='top')
     if link:
         x = ws.cell(row=lin, column=17 + d)
         x.hyperlink = urllib.parse.quote(link, safe='/')
         x.font = Font(color='2F5CA6', underline='single')
+    if pdf:
+        x = ws.cell(row=lin, column=18 + d)
+        x.hyperlink = urllib.parse.quote(pdf, safe='/')
+        x.font = Font(color='2F5CA6', underline='single')
 
 
 def erros_zip(res, corrigidos=None, sessao=''):
-    """Zip com o Excel dos erros (Resumo, Consolidado e uma aba por grupo) e os XML das notas apontadas, ligados por link em cada linha."""
+    """Zip com o Excel dos erros (Resumo, Consolidado e uma aba por grupo), os XML das notas apontadas e o PDF de validação de cada uma, ligados por link em cada linha."""
     corrigidos = corrigidos or {}
     from .consolidar import CAT_ROT, FUNDAMENTO
-    grupos, arquivos = {}, {}
+    grupos, arquivos, pdfs, pdf_bytes = {}, {}, {}, {}
     for n in res['notas']:
         cam, zipado = _arquivo_da_nota(n, sessao)
         for a in n['aponts']:
@@ -282,6 +287,14 @@ def erros_zip(res, corrigidos=None, sessao=''):
                 continue
             if cam:
                 arquivos[zipado] = cam
+                if zipado not in pdfs and cam.lower().endswith('.xml'):
+                    try:
+                        pb = espelho.gerar(cam, n)
+                    except Exception:
+                        pb = None
+                    if pb:
+                        pdfs[zipado] = re.sub(r'^XML/(.*)\.[^.]+$', r'PDF/\1.pdf', zipado)
+                        pdf_bytes[pdfs[zipado]] = pb
             g = grupos.setdefault(a['cod'], {'cod': a['cod'], 'titulo': a['titulo'], 'sev': a['sev'], 'cat': CAT_ROT.get(a.get('categoria'), ''),
                                              'expl': a.get('fundamento') or FUNDAMENTO.get(a['cod'], ''), 'itens': []})
             if a['sev'] == 'erro':
@@ -300,7 +313,7 @@ def erros_zip(res, corrigidos=None, sessao=''):
     ws.title = 'Resumo'
     ws.append(['Relatório de erros do fechamento']); ws['A1'].font = Font(bold=True, size=14, color=NAVY)
     ws.append([titulo]); ws['A2'].font = Font(color=NAVY)
-    ws.append(['Extraia o .zip antes de abrir este Excel: os links "Abrir XML" só funcionam com a pasta XML ao lado do arquivo.']); ws['A3'].font = Font(italic=True, color='8A5A00')
+    ws.append(['Extraia o .zip antes de abrir este Excel: os links "Abrir XML" e "Abrir PDF" só funcionam com as pastas XML e PDF ao lado do arquivo. O PDF é gerado do XML para conferência: não é o DANFE.']); ws['A3'].font = Font(italic=True, color='8A5A00')
     ws.append([])
     _cab(ws, ['Grupo de erro (clique para abrir)', 'Categoria', 'Situação', 'Ocorrências', 'Notas', 'Pendentes', 'Valor envolvido', 'O que significa'], [46, 22, 11, 12, 8, 10, 15, 80])
     for g in ordem:
@@ -323,7 +336,7 @@ def erros_zip(res, corrigidos=None, sessao=''):
     _cab(wc, ['Grupo de erro'] + [c for c, _ in COLS_ERRO], [34] + [l for _, l in COLS_ERRO])
     for g in ordem:
         for n, a, r, link in g['itens']:
-            _linha_erro(wc, n, a, r, link, antes=[g['titulo']])
+            _linha_erro(wc, n, a, r, link, antes=[g['titulo']], pdf=pdfs.get(link))
             lin = wc.max_row
             cel = wc.cell(row=lin, column=1)
             cel.hyperlink = Hyperlink(ref=cel.coordinate, location="'%s'!A1" % g['aba'])
@@ -341,7 +354,7 @@ def erros_zip(res, corrigidos=None, sessao=''):
         wg.append([])
         _cab(wg, [c for c, _ in COLS_ERRO], [l for _, l in COLS_ERRO])
         for n, a, r, link in g['itens']:
-            _linha_erro(wg, n, a, r, link)
+            _linha_erro(wg, n, a, r, link, pdf=pdfs.get(link))
         ult_g = wg.max_row
         wg.auto_filter.ref = 'A6:%s%d' % (get_column_letter(len(COLS_ERRO)), ult_g)
     wc.auto_filter.ref = 'A2:%s%d' % (get_column_letter(len(COLS_ERRO) + 1), wc.max_row)
@@ -354,4 +367,6 @@ def erros_zip(res, corrigidos=None, sessao=''):
         z.writestr('Erros_fechamento_%s_%s.xlsx' % (emp.get('cnpj', ''), comp), xbuf.getvalue())
         for zipado, cam in sorted(arquivos.items()):
             z.write(cam, zipado)
+        for nome, pb in sorted(pdf_bytes.items()):
+            z.writestr(nome, pb)
     return buf.getvalue()

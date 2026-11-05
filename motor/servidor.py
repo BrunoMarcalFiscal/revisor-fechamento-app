@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """Servidor local do Revisor do Fechamento (só biblioteca padrão + openpyxl/PyMuPDF já instalados)."""
-import glob, os, json, zipfile, io, shutil, re, threading, traceback, urllib.parse
+import glob, os, json, zipfile, io, shutil, re, threading, time, traceback, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from . import comparador, planilha, exportar, relatorios, estrategico, scp, scp_planilha
+from . import comparador, planilha, exportar, relatorios, estrategico, scp, scp_planilha, espelho
 
 RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # dados (sessão, resultados, histórico, configurações) podem ficar fora do código: REVISOR_DADOS (disco do servidor)
@@ -135,8 +135,15 @@ def enviar_cliente(res):
                         z.write(cam, os.path.relpath(cam, dest))
         req = urllib.request.Request(v['Endereço'].rstrip('/') + '/api/importar-fechamento?ativar=1&id=' + urllib.parse.quote(fid), data=buf.getvalue(), method='POST',
                                      headers={'X-Import-Token': v['REVISOR_IMPORT_TOKEN'], 'Content-Type': 'application/zip'})
-        with urllib.request.urlopen(req, timeout=300) as resp:
-            ret = json.loads(resp.read().decode('utf-8'))
+        for tentativa in range(4):  # o link fica fora do ar por instantes quando ele é publicado de novo
+            try:
+                with urllib.request.urlopen(req, timeout=300) as resp:
+                    ret = json.loads(resp.read().decode('utf-8'))
+                break
+            except Exception:
+                if tentativa == 3:
+                    raise
+                time.sleep(30)
         r.update(ok=bool(ret.get('ok')), ativo=ret.get('ativo'))
     except Exception as e:
         r['erro'] = str(e)
@@ -509,6 +516,14 @@ class H(BaseHTTPRequestHandler):
                                  {'Content-Disposition': 'attachment; filename="%s"' % nome})
             if u.path == '/api/envio-cliente':
                 return self._env(200, _json(os.path.join(SAIDA, 'envio_cliente.json'), {}))
+            if u.path == '/api/nota-pdf':
+                res = _json(os.path.join(SAIDA, 'resultado.json'), None) or {}
+                n = next((x for x in res.get('notas', []) if str(x.get('id')) == q.get('id')), None)
+                cam = exportar._arquivo_da_nota(n, SESSAO)[0] if n else None
+                dados = espelho.gerar(cam, n) if cam and cam.lower().endswith('.xml') else None
+                if not dados:
+                    return self._env(404, {'erro': 'Esta nota não tem XML para gerar o PDF.'})
+                return self._env(200, dados, 'application/pdf', {'Content-Disposition': 'inline; filename="Nota_%s.pdf"' % re.sub(r'\D', '', str(n.get('numero')))})
             if u.path == '/api/exportar-erros':
                 res = _json(os.path.join(SAIDA, 'resultado.json'), None)
                 if not res:

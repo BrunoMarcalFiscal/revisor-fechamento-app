@@ -738,10 +738,12 @@ async function calcular() {
   const comp = $('#inComp').value.match(/^(\d{2})\/(\d{4})$/);
   const b = $('#btnCalc'); b.disabled = true; b.textContent = 'Calculando…'; msg(temRef ? 'Lendo XML, PDF e planilha e cruzando nota a nota…' : 'Sem planilha do sistema: fechamento só pelas notas…');
   try {
+    const envioAntes = COLAB() ? null : (await api('/api/envio-cliente').catch(() => ({}))).em;
     RES = await api('/api/calcular', {method:'POST', body: JSON.stringify({cnpj: $('#inCnpj').value, competencia: comp ? comp[2] + '-' + comp[1] : ''})});
     COR = await api('/api/corrigidos'); APU = null;
     F = {mov:'', sit:'problema', cod:'', q:'', nat:'', cat:'', lim:150}; aberto.clear();
     msg(`Pronto em ${String(RES.tempo).replace('.', ',')}s.`);
+    if (!COLAB()) conferirEnvioCliente(envioAntes);
     abrirResultado();
   } catch (e) { msg('Erro ao calcular: ' + e.message, true); }
   b.disabled = false; b.textContent = 'Calcular';
@@ -956,6 +958,7 @@ function detalhe(n) {
   const meta = [
     n.chave ? `Chave <code>${esc(n.chave)}</code>` : '',
     n.arquivo ? `Arquivo <b>${esc(n.arquivo)}</b>` : '',
+    n.arquivo && /\.xml$/i.test(n.arquivo) ? `<a class="btn peq" target="_blank" rel="noopener" title="Gerado do XML para conferência; não é o DANFE" href="/api/nota-pdf?id=${n.id}" onclick="event.stopPropagation()">Ver PDF da nota</a>` : '',
     n.ref_planilha ? `Na planilha <b>${esc(n.ref_planilha)}</b>` : '',
     n.data_lanc ? `Lançada em <b>${dt(n.data_lanc)}</b>` : '',
     n.pdf ? `PDF <b>${esc(n.pdf)}</b>` : '',
@@ -1049,6 +1052,14 @@ function salvarApu() {
 }
 const kSim = s => s.numero + '|' + s.cnpj;
 const kDif = d => d.numero + '|' + d.fornecedor;
+// o envio ao calcular corre em segundo plano: avisa aqui se não chegou à cliente
+async function conferirEnvioCliente(desde) {
+  for (let i = 0; i < 24; i++) {
+    await new Promise(r => setTimeout(r, 10000));
+    const r = await api('/api/envio-cliente').catch(() => ({}));
+    if (r.em && r.em !== desde) { if (!r.ok) msg('O link da cliente NÃO foi atualizado: ' + (r.erro || 'erro') + '. Use o botão Enviar à cliente.', true); return; }
+  }
+}
 async function enviarCliente() {
   msg('Enviando à cliente…');
   try {
