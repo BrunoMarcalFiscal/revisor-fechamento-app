@@ -863,13 +863,14 @@ def regras_nfe(n, d, L, ctx):
             _regras_destino(n, x, s, idx, ctx)
         # ---- CST ICMS
         if por_cst and s['cst']:
-            # uso e consumo entra sem crédito, em 41 ou 60, qualquer que seja o CST do fornecedor
+            # uso e consumo e fornecedor do Simples (CSOSN) entram em 41 ou 60, qualquer que seja o CST da nota
             uso_consumo = entrada and suf in USO_CONSUMO
-            ac = {'41', '60'} if uso_consumo else aceitos_cst(x)
+            simples = entrada and x['cst'] in CSOSN
+            ac = {'41', '60'} if uso_consumo or simples else aceitos_cst(x)
             if s['cst'] not in ac:
                 pref = sorted(ac, key=lambda c: (c != x['cst'][-2:], c))[0] if ac else ''
-                if uso_consumo:
-                    n.ap('CST_ICMS', 'Entrada classificada como uso e consumo (%s) entra com CST 41 ou 60, qualquer que seja o CST da nota.' % s['cfop'],
+                if uso_consumo or simples:
+                    n.ap('CST_ICMS', ('Entrada classificada como uso e consumo (%s)' % s['cfop'] if uso_consumo else 'Nota de fornecedor do Simples (CSOSN %s)' % x['cst']) + ' entra com CST 41 ou 60, qualquer que seja o CST da nota.',
                          x['cst'], s['orig'] + s['cst'], 'Usar CST 41 ou 60.', idx, 'cst')
                 elif entrada:
                     txt = 'Nota veio com %s %s (%s). O CST lançado não é compatível.' % ('CSOSN' if x['cst'] in CSOSN else 'CST', x['cst'], CST_DESC.get(x['cst'], ''))
