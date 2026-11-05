@@ -157,6 +157,13 @@ def enviar_cliente(res):
     return r
 
 
+def fechamento_anterior(cnpj, competencia):
+    """Resultado guardado do mês anterior da mesma empresa, para os cruzamentos."""
+    pasta = os.path.join(HIST, '%s_%s' % (cnpj, _comp_ant(competencia)))
+    res = _json(os.path.join(pasta, 'resultado.json'), None)
+    return {'res': res, 'sessao': os.path.join(pasta, 'sessao')} if res else None
+
+
 def recebido_em():
     """Data do primeiro arquivo recebido na sessão (para medir o tempo do fechamento)."""
     import datetime
@@ -743,7 +750,7 @@ class H(BaseHTTPRequestHandler):
                 cfg = {'cnpj': re.sub(r'\D', '', b.get('cnpj', '')), 'competencia': b.get('competencia', '')}
                 os.makedirs(SESSAO, exist_ok=True)
                 json.dump(cfg, open(CFG, 'w'), ensure_ascii=False)
-                res = comparador.executar(SESSAO, cfg['cnpj'], cfg['competencia'], _json(AJUSTES, {}))
+                res = comparador.executar(SESSAO, cfg['cnpj'], cfg['competencia'], _json(AJUSTES, {}), historico=fechamento_anterior)
                 com_doc = [n for n in res.get('notas', []) if n.get('arquivo')]
                 de_fora = [n for n in com_doc if any(a.get('cod') == 'OUTRA_EMPRESA' for a in n.get('aponts', []))]
                 if EMPRESA_OK and (not empresa_permitida((res.get('empresa') or {}).get('cnpj')) or (com_doc and len(de_fora) * 2 > len(com_doc))):

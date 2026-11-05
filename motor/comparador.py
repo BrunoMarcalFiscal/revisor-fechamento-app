@@ -39,6 +39,10 @@ CATALOGO = {
     'CHAVE': ('erro', 'Chave de acesso diferente do XML'),
     'SERIE': ('alerta', 'Série diferente do XML'),
     'CASOU_SO_NUMERO': ('alerta', 'Casou só pelo número da nota'),
+    'NUMERO_TROCADO': ('erro', 'Número da nota digitado errado'),
+    'LANCADA_NUMERO_TROCADO': ('info', 'Lançada com o número trocado'),
+    'XML_MES_ANTERIOR': ('info', 'XML é de mês anterior'),
+    'CREDITO_NO_AJUSTE_SN': ('info', 'Crédito do Simples entra no ajuste da apuração'),
     'NO_LIVRO_SAIDAS': ('info', 'Nota consta no livro de saídas'),
     'LIVRO_SAIDAS_VALOR': ('alerta', 'Nota no livro de saídas com outro valor'),
     'LIVRO_SAIDAS_NUMERO': ('alerta', 'Livro de saídas: casou só pelo número'),
@@ -420,6 +424,86 @@ def _eh_fatura(cfop, modelo, participante, descricao):
     if nome and nome[0] in CONCESSIONARIAS:
         return True
     return bool(re.search(r'\b(energia eletrica|agua e esgoto|telefon|internet|telecom)', norm(descricao)))
+
+
+def _nome1(v):
+    return (norm(v).split() or [''])[0]
+
+
+def _cruzar_lancamentos(notas, competencia, anterior):
+    """Cruzamentos entre os apontamentos: número digitado errado (lançamento sem XML × nota não lançada do mesmo fornecedor e valor)
+    e XML que pertence a mês anterior (pela chave do lançamento ou pelo fechamento anterior)."""
+    ant = (anterior or {}).get('res') or {}
+    xml_ant = {}
+    for x in ant.get('notas', []):
+        if x.get('valor_xml') is not None:
+            xml_ant.setdefault(str(x.get('numero') or '').lstrip('0'), []).append(x)
+    rot_ant = '%s/%s' % (ant['competencia'][5:7], ant['competencia'][:4]) if ant.get('competencia') else ''
+    sem = [n for n in notas if not n.doc and n.lancs and any(a['cod'] == 'SEM_XML' for a in n.aponts)]
+    nao = [n for n in notas if n.doc and any(a['cod'] == 'NAO_LANCADA' for a in n.aponts)]
+    for n in sem:
+        L = n.lancs[0]
+        num = str(L.get('numero') or '')
+        par = next((x for x in nao if abs(x.doc['valor'] - L['valor']) <= 0.05 and L['valor'] > TOL and str(x.doc['numero']) != num
+                    and sorted(str(x.doc['numero'])) == sorted(num) and _nome1(x.doc.get('part_nome')) == _nome1(L.get('participante'))), None)
+        if par:
+            n.aponts = [a for a in n.aponts if a['cod'] != 'SEM_XML']
+            n.ap('NUMERO_TROCADO', 'Lançado como %s, mas a nota do mesmo fornecedor e valor é a %s, emitida em %s: os dígitos estão invertidos.' % (num, par.doc['numero'], _dbr(par.doc['emissao'])),
+                 par.doc['numero'], num, 'Corrigir o número do lançamento para %s.' % par.doc['numero'], valor=L['valor'])
+            par.aponts = [a for a in par.aponts if a['cod'] != 'NAO_LANCADA']
+            par.ap('LANCADA_NUMERO_TROCADO', 'Está no livro com o número %s (mesmo fornecedor e valor).' % num, par.doc['numero'], num)
+            nao.remove(par)
+            continue
+        ch = str(L.get('chave') or '')
+        hit = next((x for x in xml_ant.get(num.lstrip('0'), []) if (ch and x.get('chave') == ch) or _nome1(x.get('part_nome')) == _nome1(L.get('participante'))
+                    or (L.get('cnpj') and digitos(L['cnpj'])[:8] == digitos(x.get('part_cnpj'))[:8])), None)
+        mes_chave = competencia and len(ch) == 44 and ch[2:6] < competencia[2:4] + competencia[5:7]
+        if hit or mes_chave:
+            n.aponts = [a for a in n.aponts if a['cod'] != 'SEM_XML']
+            onde = 'O XML está no fechamento de %s (nota de %s, %s).' % (rot_ant, _dbr(hit.get('emissao')), brl(hit.get('valor_xml'))) if hit else 'A chave é de %s/20%s: o XML pertence ao mês da emissão.' % (ch[4:6], ch[2:4])
+            n.ap('XML_MES_ANTERIOR', 'Nota de mês anterior lançada agora. ' + onde, 'mês anterior', L['valor'])
+
+
+def _marcar_repetidos(notas, anterior):
+    """Marca o erro que o mesmo fornecedor já teve no fechamento anterior: aponta padrão de lançamento, não engano isolado."""
+    ant = (anterior or {}).get('res') or {}
+    if not ant.get('competencia'):
+        return
+    rot = '%s/%s' % (ant['competencia'][5:7], ant['competencia'][:4])
+    def part(cn, nome):
+        return digitos(cn)[:8] or _nome1(nome)
+    vistos = {(a['cod'], part(x.get('part_cnpj'), x.get('part_nome'))) for x in ant.get('notas', []) for a in x.get('aponts', []) if a.get('sev') in ('erro', 'alerta')}
+    for n in notas:
+        d = n.doc or {}
+        L = n.lancs[0] if n.lancs else {}
+        p = part(d.get('part_cnpj') or L.get('cnpj'), d.get('part_nome') or L.get('participante'))
+        for a in n.aponts:
+            if a['sev'] in ('erro', 'alerta') and a['cod'] not in ('NAO_LANCADA', 'SEM_XML', 'NUMERO_PULADO') and (a['cod'], p) in vistos:
+                a['repete'] = rot
+
+
+def _pendentes_anteriores(lancs, anterior):
+    """Não lançadas do fechamento anterior que continuam fora do livro deste mês. Nota cancelada depois (evento no XML) não conta."""
+    ant = (anterior or {}).get('res') or {}
+    if not ant.get('notas'):
+        return []
+    livro = {(str(L.get('numero') or '').lstrip('0'), _nome1(L.get('participante'))) for L in lancs}
+    nums = {k[0] for k in livro}
+    out = []
+    sem_xml = [x for x in ant['notas'] if any(a.get('cod') == 'SEM_XML' for a in x.get('aponts', []))]
+    for x in ant['notas']:
+        if not any(a.get('cod') == 'NAO_LANCADA' for a in x.get('aponts', [])):
+            continue
+        if any(abs((y.get('valor_sis') or 0) - (x.get('valor_xml') or 0)) <= 0.05 and sorted(str(y.get('numero'))) == sorted(str(x.get('numero'))) for y in sem_xml):
+            continue  # é número digitado errado: a nota está no livro
+        num = str(x.get('numero') or '').lstrip('0')
+        if (num, _nome1(x.get('part_nome'))) in livro or (num in nums and any(k == (num, _nome1(x.get('part_nome'))) for k in livro)):
+            continue
+        cam = os.path.join((anterior or {}).get('sessao') or '', x.get('mov') or '', os.path.basename(x.get('arquivo') or ''))
+        if os.path.isfile(cam) and any(e.get('tipo') == 'evento' and e.get('cancelamento') for e in xml_docs.ler(cam)):
+            continue
+        out.append({'numero': x.get('numero'), 'part_nome': x.get('part_nome'), 'emissao': x.get('emissao'), 'valor': x.get('valor_xml'), 'competencia': ant.get('competencia'), 'chave': x.get('chave')})
+    return out
 
 
 def _dbr(d):
@@ -815,6 +899,8 @@ def regras_nfe(n, d, L, ctx):
                 elif s['icms'] > destac + TOL:
                     n.ap('CREDITO_MAIOR', 'O crédito lançado passa o ICMS %s na nota.' % ('permitido (Simples)' if x['cst'] in CSOSN else 'destacado'),
                          destac, s['icms'], 'Reduzir o crédito para %s.' % brl(destac), idx, 'icms', s['icms'] - destac)
+                elif destac > TOL and s['icms'] <= TOL and suf in REVENDA_INDUSTRIA and x['cst'] in CSOSN:
+                    n.ap('CREDITO_NO_AJUSTE_SN', 'O crédito do Simples desta nota (%s) entra no ajuste da aba Apuração, não na linha do livro.' % brl(destac), destac, s['icms'], '', idx, 'icms')
                 elif destac > TOL and s['icms'] <= TOL and suf in REVENDA_INDUSTRIA:
                     n.ap('CREDITO_NAO_TOMADO', 'Compra para %s com ICMS destacado e sem crédito.' % ('industrialização' if suf in ('101', '401', '116', '120', '122', '124') else 'comercialização'),
                          destac, s['icms'], 'Conferir: se a operação dá crédito, lançar %s.' % brl(destac), idx, 'icms', destac)
@@ -1120,7 +1206,7 @@ def regras_nfse(n, d, L, ctx):
 
 # --------------------------------------------------------------------------------------------- execução
 
-def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None):
+def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None, historico=None):
     t0 = datetime.datetime.now()
     docs_raw, eventos, pdfs, erros, inventario = carregar(sessao)
     cancelados = {e['chave'] for e in eventos if e.get('cancelamento')}
@@ -1204,6 +1290,9 @@ def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None):
             notas.append(n)
             continue
         L = Ls[0]
+        if len(Ls) == 1 and len(L['blocos']) > 1 and abs(sum(r.get('valor_contabil', 0) for b in L['blocos'] for r in b) - d['valor']) <= TOL:
+            # a nota foi lançada em partes e a soma fecha com o XML: é um lançamento só, não duplicidade
+            L['linhas'] = [r for b in L['blocos'] for r in b]; L['blocos'] = [L['linhas']]; L['valor'] = round(sum(r.get('valor_contabil', 0) for r in L['linhas']), 2)
         if len(Ls) > 1 or len(L['blocos']) > 1:
             refs = [x['ref'] for x in Ls] + ['%s › %s › linha %s' % (L['arquivo'], L['aba'], b[0]['linha']) for b in L['blocos'][1:]]
             n.ap('DUPLICIDADE', 'A mesma nota aparece em mais de um lançamento: %s.' % ' | '.join(refs), d['valor'],
@@ -1367,13 +1456,17 @@ def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None):
     for n in notas:
         if n.doc and (n.doc['mov'] not in movs_ref or (n.doc.get('raw') or {}).get('manual')):
             n.aponts = [x for x in n.aponts if x['cod'] not in ('NAO_LANCADA', 'NAO_LANCADA_MES_ANT')]
+    anterior = historico(emp.get('cnpj'), competencia) if historico and competencia else None
+    _cruzar_lancamentos(notas, competencia, anterior)
     for n in notas:
         consolidar.consolidar(n)
+    _marcar_repetidos(notas, anterior)
     locs = _locacoes(loc_regs)
     if so_notas:
         regs = (regs or []) + _regs_do_xml(docs, emp, ncms_vendidos)   # apuração de ICMS/IPI a partir das próprias notas
     r = montar_resultado(notas, docs, lancs, descs, emp, competencia, inventario, erros, pdfs, cols, t0, painel_dev, painel_num, inuts, regs, locs, serv_rel)
     r['modo'] = 'so_notas' if so_notas else 'comparativo'
+    r['pendentes_anteriores'] = _pendentes_anteriores(lancs, anterior)
     # ICMS/IPI só existem com NF-e/CT-e (produto e frete); prestadora de serviço só tem NFS-e
     r['tem_icms'] = any(d['tipo'] in ('nfe', 'cte') for d in docs) or any((L.get('mov_hint') in ('entrada', 'saida', 'frete')) for L in lancs)
     return r

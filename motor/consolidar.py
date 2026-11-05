@@ -19,14 +19,14 @@ CAT_ROT = dict(CATEGORIAS)
 CATEGORIA = {}
 for cat, cods in {
     'presenca': ['NAO_LANCADA', 'NAO_LANCADA_MES_ANT', 'FORA_COMPETENCIA', 'SEM_XML', 'FATURA_SEM_XML', 'SEM_XML_PDF', 'PDF_NAO_LANCADO', 'DUPLICIDADE',
-                 'OUTRA_EMPRESA', 'CASOU_SO_NUMERO', 'NO_LIVRO_SAIDAS', 'LIVRO_SAIDAS_VALOR', 'LIVRO_SAIDAS_NUMERO', 'PARTE_NAO_LANCADA', 'LINHA_SOBRANDO'],
+                 'OUTRA_EMPRESA', 'CASOU_SO_NUMERO', 'NUMERO_TROCADO', 'LANCADA_NUMERO_TROCADO', 'XML_MES_ANTERIOR', 'NO_LIVRO_SAIDAS', 'LIVRO_SAIDAS_VALOR', 'LIVRO_SAIDAS_NUMERO', 'PARTE_NAO_LANCADA', 'LINHA_SOBRANDO'],
     'cadastro': ['PARTICIPANTE', 'PARTICIPANTE_FILIAL', 'CHAVE', 'SERIE', 'DATA_ANTERIOR', 'DATA_EMISSAO'],
     'valores': ['VALOR_TOTAL', 'LOCACAO_VALOR', 'VALOR_LINHA', 'SERVICO_LIQUIDO'],
     'cfop': ['CFOP_SAIDA', 'CFOP_UF', 'CFOP_UF_PRESENCIAL', 'CFOP_INCOMPATIVEL', 'CFOP_BRANCO', 'CFOP_FRETE', 'DESTINO_COMBUSTIVEL',
              'DESTINO_CONSUMO', 'DESTINO_ATIVO'],
     'cst': ['CST_ICMS', 'CST_SAIDA', 'CST_ORIGEM'],
     'icms': ['BASE_ICMS', 'ALIQ_ICMS', 'ICMS_SAIDA', 'ICMS_ENTRADA_PROPRIA', 'CREDITO_MAIOR', 'CREDITO_MENOR', 'CREDITO_USO_CONSUMO',
-             'CREDITO_ATIVO', 'CREDITO_NAO_TOMADO', 'CREDITO_COMBUSTIVEL', 'CREDITO_DEV_VENDA', 'DEV_USO_CONSUMO_ICMS'],
+             'CREDITO_ATIVO', 'CREDITO_NAO_TOMADO', 'CREDITO_NO_AJUSTE_SN', 'CREDITO_COMBUSTIVEL', 'CREDITO_DEV_VENDA', 'DEV_USO_CONSUMO_ICMS'],
     'st': ['CFOP_ST', 'CFOP_ST_SEM_ST', 'ST_VALOR', 'ST_MISTO'],
     'ipi': ['IPI_VALOR', 'IPI_USO_CONSUMO'],
     'piscofins': ['PIS_COFINS_VALOR', 'PC_CST_SAIDA', 'PC_MONOFASICO', 'PC_USO_CONSUMO', 'PC_NAO_TOMADO', 'PC_BASE_ICMS', 'PC_ALIQ', 'PC_FRETE'],
@@ -90,6 +90,7 @@ FUNDAMENTO = {
     'DEVOLVIDA_INTEGRAL': 'Compra devolvida por inteiro tem efeito zero, mas se uma nota for lançada a outra também precisa ser.',
     'LIVRO_SAIDAS_VALOR': 'A nota que está no livro de saídas precisa ter o mesmo valor do documento.',
     'LIVRO_SAIDAS_NUMERO': 'Sem chave, CNPJ ou nome no livro, notas de fornecedores diferentes podem ter o mesmo número.',
+    'NUMERO_TROCADO': 'O número do livro tem de ser o do documento; número errado deixa a nota sem XML no cruzamento e faz a verdadeira parecer não lançada.',
     'CASOU_SO_NUMERO': 'Sem CNPJ nem chave na planilha, o vínculo é só pelo número, e notas de fornecedores diferentes podem ter o mesmo número.',
 }
 

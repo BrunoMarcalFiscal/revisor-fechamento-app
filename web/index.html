@@ -295,7 +295,7 @@ table.apu tr.cs-nf .t{font-weight:700;color:var(--suave)}
 .abas-res button.on{color:var(--navy);border-bottom-color:var(--navy)}
 .abas-res button .c{margin-left:6px;font-size:11px;font-weight:700;color:var(--fraco);font-variant-numeric:tabular-nums}
 .abas-res .fonte{margin-left:auto;padding:0 4px;font-size:12px;color:var(--fraco);white-space:nowrap}
-.res-nv{display:grid;grid-template-columns:260px minmax(0,1fr);gap:12px;align-items:start}
+.res-nv{display:grid;grid-template-columns:280px minmax(0,1fr);gap:12px;align-items:start}
 .rail{position:sticky;top:8px;max-height:calc(100vh - 16px);overflow:auto}
 .rl{display:flex;justify-content:space-between;gap:8px;padding:7px 12px;border-bottom:1px solid var(--borda2);cursor:pointer;align-items:center}
 .rl:hover{background:#F7F9FC}
@@ -304,6 +304,7 @@ table.apu tr.cs-nf .t{font-weight:700;color:var(--suave)}
 .rl>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rl.cat{font-weight:600;color:var(--navy)}
 .rl.sub{padding-left:26px;font-size:12px;color:var(--suave)}
+.rl.sub>span{white-space:normal;line-height:1.3}
 .rl.sub .dot{margin-right:6px}
 .rl .gi{display:inline-block;width:12px;font-style:normal;transition:transform .1s}
 .rl .gi.on{transform:rotate(90deg)}
@@ -315,6 +316,58 @@ table.apu tr.cs-nf .t{font-weight:700;color:var(--suave)}
 .res-nv table.notas .aps .tag.info{flex:none}
 .res-nv.sem-rail{grid-template-columns:minmax(0,1fr)}
 .res-nv.sem-rail .rail{display:none}
+.scp-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.scp-bar .q{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--suave)}.scp-bar .q b{color:var(--navy)}
+.scp-bar .ac{display:flex;gap:6px;align-items:center}
+.scp-mais{position:relative}.scp-mais summary{list-style:none;cursor:pointer}.scp-mais summary::-webkit-details-marker{display:none}
+.scp-mais .m{position:absolute;right:0;top:calc(100% + 4px);z-index:30;background:#fff;border:1px solid var(--borda);border-radius:6px;box-shadow:0 8px 22px rgba(33,46,80,.14);min-width:220px;padding:4px}
+.scp-mais .m button{display:block;width:100%;text-align:left;background:none;border:0;padding:7px 10px;font:inherit;border-radius:4px;color:var(--texto);cursor:pointer}.scp-mais .m button:hover{background:var(--palido)}
+#secScp .xl-tabs{gap:0;border-bottom:1px solid var(--borda);margin-bottom:12px;flex-wrap:nowrap;overflow-x:auto}
+#secScp .xl-tabs button{background:none;border:0;border-bottom:2px solid transparent;margin-bottom:-1px;border-radius:0;padding:8px 12px;white-space:nowrap;color:var(--suave);cursor:pointer}
+#secScp .xl-tabs button.on{background:none;color:var(--navy);border-bottom-color:var(--navy)}
+#secScp .xl-tabs button.sep{margin-left:auto}
+#secScp table.xl{font-family:inherit}
+#secScp table.xl td.c{border-color:#D5DBE6}
+#secScp table.xl td.x-tit,#secScp table.xl td.x-totg{border-color:#212E50}
+#secScp table.xl td.x-sub{border-top-color:#C9D8EE;border-bottom-color:#C9D8EE}
+.scp-hero{margin-bottom:12px}.scp-hero .kpi{cursor:default}.scp-hero .kpi:hover{background:none}.scp-hero .v{font-size:22px}
+.scp-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}
+.scp-g .ph .lnk{margin-left:auto;font-weight:500;font-size:12px}
+.sb{padding:12px;display:grid;gap:12px}
+.sb-l .t{display:flex;justify-content:space-between;gap:10px;margin-bottom:4px;color:var(--suave)}.sb-l .t b{color:var(--navy);font-variant-numeric:tabular-nums}.sb-l small{color:var(--fraco);font-weight:500}
+.sb-l .tr{height:12px;background:var(--borda2);border-radius:3px;overflow:hidden}.sb-l i{display:block;height:100%}
+.c-ant{background:#C9D3E3}.c-est{background:var(--navy)}.c-scp{background:var(--azul-claro)}
+.st{display:flex;height:24px;border-radius:3px;overflow:hidden;background:var(--borda2)}.st i{display:flex;align-items:center;padding:0 8px;font-size:11.5px;font-style:normal;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden}.st i.c-scp{color:var(--navy)}
+.scp-faixa{display:flex;gap:24px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:var(--palido);border:1px solid #C9D8EE;border-radius:4px;margin-bottom:12px;color:var(--suave)}.scp-faixa b{color:var(--navy);font-variant-numeric:tabular-nums}
+.scp-faixa span:first-child{display:flex;gap:8px;align-items:center}
+.scp-al{margin-bottom:24px}
+@media (max-width:1000px){.scp-g{grid-template-columns:minmax(0,1fr)}#secScp .xl-tabs button.sep{margin-left:0}}
+.rl-t{padding:10px 12px 4px;font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--fraco)}
+.tag.rep{flex:none}
+.porque{padding:10px 12px;background:var(--palido);border-bottom:1px solid var(--borda)}.porque b{color:var(--navy)}.porque p{margin:3px 0 5px;color:var(--suave);font-size:12.5px}
+.pq-d{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--suave)}.pq-d .rep{color:#8A5A00;font-weight:600}
+.mod-l{display:grid;grid-template-columns:200px minmax(0,1fr);gap:14px;align-items:start}
+.mod-nav{position:sticky;top:8px;background:var(--painel);border:1px solid var(--borda);border-radius:4px;padding-bottom:6px;display:flex;flex-direction:column}
+.mod-nav button{background:none;border:0;border-left:2px solid transparent;text-align:left;padding:7px 12px;font:inherit;color:var(--suave);font-weight:500;cursor:pointer}
+.mod-nav button:hover{background:#F7F9FC}.mod-nav button.on{background:var(--palido);color:var(--navy);font-weight:600;border-left-color:var(--navy)}
+.mod-c{min-width:0}
+.doc-acao{display:flex;align-items:center;gap:12px;padding:10px 12px;margin-bottom:12px;flex-wrap:wrap;position:sticky;top:0;z-index:15}
+.doc-acao .msg{flex:1;min-width:120px}
+.doc-op{position:relative;margin-left:auto}.doc-op summary{cursor:pointer;list-style:none;font-size:12.5px}.doc-op summary::-webkit-details-marker{display:none}
+.doc-op .m{position:absolute;right:0;top:calc(100% + 6px);z-index:30;background:#fff;border:1px solid var(--borda);border-radius:6px;box-shadow:0 8px 22px rgba(33,46,80,.14);padding:12px;display:grid;gap:8px;min-width:280px}
+.doc-op label{display:grid;gap:3px;font-size:12px;font-weight:600;color:var(--suave)}.doc-op input{font:inherit;padding:6px 8px;border:1px solid var(--borda);border-radius:4px}
+.doc-g{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:start;margin-bottom:12px}
+.doc-r{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;border-bottom:1px solid var(--borda2)}.doc-r:last-child{border-bottom:0}
+#cards .drop.doc-d{margin:0;border:0;border-radius:0;background:none;padding:9px 12px;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:10px;text-align:left;min-height:0}
+#cards .doc-d>span{margin:0}
+#cards .doc-d .vazio-ck,#cards .doc-d .check{flex:none}
+#cards .drop.doc-d:hover,#cards .drop.doc-d.over{background:var(--palido)}
+.doc-d .tx{min-width:0;flex:1;display:grid}.doc-d .tx b{font-weight:600}.doc-d .tx small{color:var(--fraco);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doc-d .qt{font-size:12px;color:var(--fraco);white-space:nowrap}.doc-r.ok .qt{color:var(--ok);font-weight:600}
+.doc-r .ac{display:flex;gap:10px;align-items:center;padding-right:12px;font-size:12px}
+.doc-col,.doc-r .lista{grid-column:1 / -1}.doc-col{display:none;padding:0 12px 10px}.doc-col.on{display:block}
+.doc-man{margin-bottom:24px}.doc-man>summary{padding:10px 12px;cursor:pointer;font-weight:600;color:var(--navy)}
+@media (max-width:1000px){.doc-g{grid-template-columns:minmax(0,1fr)}.mod-l{grid-template-columns:minmax(0,1fr)}.mod-nav{position:static;flex-direction:row;overflow-x:auto;padding:0}.mod-nav .rl-t{display:none}.mod-nav button{white-space:nowrap;border-left:0;border-bottom:2px solid transparent}.mod-nav button.on{border-bottom-color:var(--navy)}}
 .dobra-av{margin-bottom:10px;font-size:12px}
 .dobra-av summary{cursor:pointer;color:#8A5A00;font-weight:600;padding:2px 0}
 .mais-f{flex-basis:100%;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding-top:8px;border-top:1px solid var(--borda2)}
@@ -541,18 +594,16 @@ label.chk{display:flex!important;flex-direction:row!important;align-items:center
 <header class="pg"><div><h1 id="pgTit">Documentos</h1><p id="pgSub">Envie os arquivos do mês e clique em Calcular.</p></div></header>
 <main>
 <section id="secDocs">
-  <div class="painel params">
-    <label>CNPJ da empresa<input id="inCnpj" placeholder="opcional, identifico pelos XML" inputmode="numeric"></label>
-    <label>Competência<input id="inComp" placeholder="MM/AAAA (opcional)" maxlength="7" inputmode="numeric"></label>
-    <div class="dica">Arraste arquivos, pastas ou .zip em cada quadro. Pode mandar milhares de XML de uma vez.</div>
-  </div>
-  <div class="cards" id="cards"></div>
-  <div class="painel man" id="manuais"></div>
-  <div class="acao">
+  <div class="doc-acao painel">
     <button class="btn pri grande" id="btnCalc" onclick="calcular()">Calcular</button>
     <div class="prog" id="prog"><i></i></div>
     <span class="msg" id="msg"></span>
+    <details class="doc-op"><summary class="lnk">CNPJ e competência</summary><div class="m">
+      <label>CNPJ da empresa<input id="inCnpj" placeholder="opcional, identifico pelos XML" inputmode="numeric"></label>
+      <label>Competência<input id="inComp" placeholder="MM/AAAA (opcional)" maxlength="7" inputmode="numeric"></label></div></details>
   </div>
+  <div id="cards"></div>
+  <details class="painel doc-man"><summary>Notas de serviço lançadas à mão</summary><div class="man" id="manuais"></div></details>
 </section>
 
 <section id="secRes" class="oculto"></section>
@@ -613,6 +664,8 @@ async function salvarObs(nk) {
 let F = {mov:'', sit:'problema', cod:'', q:'', nat:'', cat:'', lim:150};
 const aberto = new Set();
 let VISAO = 'notas', AVISOS_ABERTOS = false, MAIS_FILTROS = false;
+const GRUPOS_ERRO = [['falta', 'Lançamento e documento', ['presenca', 'cancel']], ['imposto', 'Imposto e crédito', ['icms', 'st', 'ipi', 'piscofins', 'iss', 'retencoes']],
+  ['class', 'Classificação (CFOP e CST)', ['cfop', 'cst', 'frete']], ['valores', 'Valores e cadastro', ['valores', 'cadastro']], ['dev', 'Devoluções', ['devolucao']]];
 const RAIL = new Set();
 
 const $ = s => document.querySelector(s);
@@ -637,24 +690,28 @@ async function api(url, opt) {
 }
 
 // ------------------------------------------------------------------ cards
+const CARD_CURTO = {entrada: 'NF-e de compras', saida: 'NF-e e NFC-e emitidas', frete: 'CT-e de frete', prestado: 'NFS-e emitidas', tomado: 'NFS-e recebidas', diversos: 'PDF de notas',
+  planilha: 'Movimento dos livros fiscais', planilha_locacoes: 'Só as linhas de Locação', planilha_livro_saidas: 'Retornos pelo portal de vendas', serv_saida: 'Serviços prestados', serv_entrada: 'Serviços tomados'};
 function desenharCards() {
   const el = $('#cards');
-  el.innerHTML = CARDS.map(c => {
+  const linha = c => {
     const st = EST?.cards?.[c.id] || {qtd:0, bytes:0, arquivos:[]};
-    const qt = st.qtd ? `${st.qtd} arquivo${st.qtd > 1 ? 's' : ''}` : 'vazio';
-    const corpoDrop = st.qtd
-      ? `<div class="drop recebido" data-card="${c.id}"><div><b>✓ ${st.qtd} arquivo${st.qtd > 1 ? 's' : ''} recebido${st.qtd > 1 ? 's' : ''}</b></div><div class="ext">arraste ou clique para adicionar mais</div></div>`
-      : `<div class="drop" data-card="${c.id}"><div><b>Arraste aqui</b> ou clique para escolher</div><div class="ext">${c.ext}</div></div>`;
-    const ck = st.qtd ? '<span class="check" title="arquivo recebido">✓</span>' : '<span class="vazio-ck"></span>';
-    const rod = `<div class="rod"><span>${st.qtd ? kb(st.bytes) : ''}</span><span class="esp">
-        ${st.qtd ? `<button class="lnk" onclick="toggleLista('${c.id}')">ver arquivos</button><button class="lnk perigo" onclick="limpar('${c.id}')">limpar</button>` : ''}</span></div>`;
-    const lista = `<div class="lista" id="lista-${c.id}">${st.arquivos.slice(0, 500).map(a => `<div><span title="${esc(a.nome)}">${esc(a.nome)}</span><span>${kb(a.tamanho)}</span><button title="remover" onclick="remover('${c.id}','${esc(a.nome).replace(/'/g, "\\'")}')">✕</button></div>`).join('')}${st.arquivos.length > 500 ? `<div><span>+ ${st.arquivos.length - 500} arquivos</span></div>` : ''}</div>`;
-    if (c.id.startsWith('planilha')) {
-      return `<div class="painel card ref ${st.qtd ? 'ok' : ''}"><div class="cab">${ck}<span class="t">${c.t}</span><span class="s">${c.s}</span><span class="qtd ${st.qtd ? 'tem' : ''}">${qt}</span></div>
-        <div class="ref-corpo"><div style="display:flex;flex-direction:column">${corpoDrop}${rod}</div><div class="abas-pl" id="abasPl-${c.id}">${desenharPlanilha(c.id)}</div></div>${lista}</div>`;
-    }
-    return `<div class="painel card ${st.qtd ? 'ok' : ''}"><div class="cab">${ck}<div><div class="t">${c.t}</div><div class="s">${c.s}</div></div><span class="qtd ${st.qtd ? 'tem' : ''}">${qt}</span></div>${corpoDrop}${rod}${lista}</div>`;
-  }).join('');
+    const ehRel = c.id.startsWith('planilha') || c.id.startsWith('serv_');
+    const abas = PL ? PL.abas.filter(a => (a.card || 'planilha') === c.id) : [];
+    const ruim = abas.some(a => a.utilizavel === false);
+    return `<div class="doc-r ${st.qtd ? 'ok' : ''}"><div class="drop doc-d" data-card="${c.id}">
+        <span class="${st.qtd ? 'check' : 'vazio-ck'}">${st.qtd ? '✓' : ''}</span>
+        <span class="tx"><b>${c.t}</b><small>${esc(CARD_CURTO[c.id] || c.s)}</small></span>
+        <span class="qt">${st.qtd ? `${st.qtd} arquivo${st.qtd > 1 ? 's' : ''}` : 'Arraste ou clique'}</span></div>
+      <span class="ac">${ruim ? '<span class="tag erro">coluna não reconhecida</span>' : ''}${st.qtd && ehRel ? `<button class="lnk" onclick="document.getElementById('colunas-${c.id}').classList.toggle('on')">colunas</button>` : ''}${st.qtd ? `<button class="lnk" onclick="toggleLista('${c.id}')">ver</button><button class="lnk perigo" onclick="limpar('${c.id}')">limpar</button>` : ''}</span>
+      ${ehRel ? `<div class="doc-col ${ruim ? 'on' : ''}" id="colunas-${c.id}"><div class="abas-pl" id="abasPl-${c.id}">${desenharPlanilha(c.id)}</div></div>` : ''}
+      <div class="lista" id="lista-${c.id}">${st.arquivos.slice(0, 500).map(a => `<div><span title="${esc(a.nome)}">${esc(a.nome)}</span><span>${kb(a.tamanho)}</span><button title="remover" onclick="remover('${c.id}','${esc(a.nome).replace(/'/g, "\\'")}')">×</button></div>`).join('')}</div></div>`;
+  };
+  const eh = c => c.id.startsWith('planilha') || c.id.startsWith('serv_');
+  const conta = xs => xs.filter(c => EST?.cards?.[c.id]?.qtd).length;
+  const xml = CARDS.filter(c => !eh(c)), rel = CARDS.filter(eh);
+  el.innerHTML = `<div class="doc-g"><div class="painel"><div class="ph">Notas fiscais <small>${conta(xml)} de ${xml.length} com arquivo</small></div>${xml.map(linha).join('')}</div>
+    <div class="painel"><div class="ph">Relatórios do sistema <small>${conta(rel)} de ${rel.length} com arquivo</small></div>${rel.map(linha).join('')}</div></div>`;
   el.querySelectorAll('.drop').forEach(d => {
     d.onclick = () => { cardAlvo = d.dataset.card; const i = $('#arq'); i.accept = CARDS.find(c => c.id === cardAlvo).acc; i.value = ''; i.click(); };
     d.ondragover = e => { e.preventDefault(); d.classList.add('over'); };
@@ -834,23 +891,23 @@ function desenharResultado(manterScroll) {
   if (RES.pdf_sem_texto?.length) avisos.push(`PDF com páginas sem texto (escaneadas), não conferidas: ${RES.pdf_sem_texto.map(p => esc(p.arquivo) + ' pág. ' + p.paginas.slice(0, 8).join(', ')).join('; ')}`);
   const kpi = (sit, cls, rot, v, d) => `<div class="kpi ${cls} ${F.sit === sit ? 'sel' : ''}" onclick="filtrar({sit: F.sit === '${sit}' ? 'problema' : '${sit}', cod: '', cat: ''})"><div class="r">${rot}</div><div class="v">${v}</div><div class="d">${d}</div></div>`;
   const pendCli = pendenciasCliente().length, nDev = (RES.devolucoes || []).length + (RES.canceladas || []).length + (RES.pulos || []).length + (RES.inutilizadas || []).length;
-  const aba = (k, t, c) => `<button class="${VISAO === k ? 'on' : ''}" onclick="trocarVisao('${k}')">${t}${c ? `<span class="c">${c}</span>` : ''}</button>`;
+  const item = (k, t, c) => `<div class="rl ${VISAO === k ? 'sel' : ''}" onclick="trocarVisao('${k}')"><span>${t}</span>${c ? `<b>${c}</b>` : ''}</div>`;
   const rail = () => {
-    const total = RES.notas.filter(n => ['erro', 'alerta'].includes(st(n))).length;
-    const cats = (RES.categorias || [['', '']]).map(([cat, rot]) => ({cat, rot, xs: ranking.filter(x => (x.categoria || '') === cat), n: RES.notas.filter(n => pend(n).some(a => a.categoria === cat)).length})).filter(c => c.xs.length).sort((a, b) => b.n - a.n);
-    return `<div class="painel rail"><div class="ph">Tipos de erro</div>
-      <div class="rl ${!F.cat && !F.cod ? 'sel' : ''}" onclick="filtrar({cat: '', cod: '', sit: 'problema'})"><span>Todos os problemas</span><b>${total}</b></div>
-      ${cats.map(c => { const on = RAIL.has(c.cat) || F.cat === c.cat || c.xs.some(x => x.cod === F.cod);
-        return `<div class="rl cat ${F.cat === c.cat && !F.cod ? 'sel' : ''}" onclick="railCat('${c.cat}')"><span><i class="gi ${on ? 'on' : ''}">›</i>${esc(c.rot)}</span><b>${c.n}</b></div>` +
-          (on ? c.xs.map(x => `<div class="rl sub ${F.cod === x.cod ? 'sel' : ''}" title="${esc(x.titulo)}" onclick="filtrar({cod:'${x.cod}',cat:'',sit:'todas'})"><span><span class="dot ${x.sev}"></span>${esc(x.titulo)}</span><b>${x.notas}</b></div>`).join('') : ''); }).join('') || '<div class="vazio-res">Nenhuma divergência encontrada.</div>'}
+    const grupos = GRUPOS_ERRO.map(([id, rot, cats]) => ({id, rot, xs: ranking.filter(x => cats.includes(x.categoria || '')), n: RES.notas.filter(n => pend(n).some(a => cats.includes(a.categoria))).length})).filter(g => g.xs.length).sort((a, b) => b.n - a.n);
+    return `<div class="painel rail"><div class="rl-t">Visão</div>${item('notas', 'Notas a resolver', vivo.erro + vivo.alerta)}${item('pend', 'Pendências do cliente', pendCli + (RES.pendentes_anteriores || []).length)}${item('mov', 'Por movimento')}${item('dev', 'Devoluções e canceladas', nDev)}
+      ${VISAO === 'notas' ? `<div class="rl-t">Tipos de erro</div>
+      <div class="rl ${!F.grp && !F.cod ? 'sel' : ''}" onclick="filtrar({grp: '', cat: '', cod: '', sit: 'problema'})"><span>Todos</span><b>${vivo.erro + vivo.alerta}</b></div>
+      ${grupos.map(g => { const on = RAIL.has(g.id) || F.grp === g.id || g.xs.some(x => x.cod === F.cod);
+        return `<div class="rl cat ${F.grp === g.id && !F.cod ? 'sel' : ''}" onclick="railCat('${g.id}')"><span><i class="gi ${on ? 'on' : ''}">›</i>${esc(g.rot)}</span><b>${g.n}</b></div>` +
+          (on ? g.xs.map(x => `<div class="rl sub ${F.cod === x.cod ? 'sel' : ''}" title="${esc(x.titulo)}" onclick="filtrar({cod:'${x.cod}',grp:'',cat:'',sit:'todas'})"><span><span class="dot ${x.sev}"></span>${esc(x.titulo)}</span><b>${x.notas}</b></div>`).join('') : ''); }).join('') || '<div class="vazio-res">Nenhuma divergência encontrada.</div>'}` : ''}
     </div>`;
   };
   const visoes = {
-    notas: () => `<div class="res-nv" id="resNv">${rail()}<div class="painel" style="min-width:0">
-      <div class="filtros" id="filtros"></div><div id="loteBar"></div>
+    notas: () => `<div class="painel" style="min-width:0">
+      <div class="filtros" id="filtros"></div><div id="porque"></div><div id="loteBar"></div>
       <div style="overflow:auto"><table class="notas"><thead><tr><th>Situação</th><th>Documento</th><th>Participante</th><th class="num">Valor XML</th><th class="num">Valor sistema</th><th>Apontamentos</th><th></th></tr></thead><tbody id="tbNotas"></tbody></table></div>
-      <div class="mais" id="mais"></div></div></div>`,
-    pend: () => painelPendencias() || '<div class="painel"><div class="vazio-res">Nada para pedir ao cliente neste fechamento.</div></div>',
+      <div class="mais" id="mais"></div></div>`,
+    pend: () => (painelPendencias() + painelAnteriores()) || '<div class="painel"><div class="vazio-res">Nada para pedir ao cliente neste fechamento.</div></div>',
     mov: () => `<div class="painel"><div class="ph">Por movimento <small>clique em uma linha para ver as notas</small></div>
       <div style="overflow:auto"><table class="mov"><thead><tr><th>Movimento</th><th class="num">XML</th><th class="num">Lançadas</th><th class="num">Corretas</th><th class="num">Erro</th><th class="num">Conferir</th><th class="num">Corrigidas</th><th class="num">Não lançadas</th><th class="num">Sem XML</th><th class="num">Total XML</th><th class="num">Total sistema</th><th class="num">Diferença</th></tr></thead>
       <tbody>${Object.entries(m).map(([k, v]) => { const d = Math.round((v.valor_sis - v.valor_xml) * 100) / 100; const z = n => n ? n : `<span class="zero">0</span>`;
@@ -865,16 +922,28 @@ function desenharResultado(manterScroll) {
     ${kpi('corrigida', 'corr', 'Resolvidas', vivo.corrigida, 'corrigidas ou justificadas')}
     ${kpi('ok', 'ok', 'Corretas', vivo.ok, (r.notas ? Math.round(100 * vivo.ok / r.notas) : 0) + '% de ' + r.notas + ' notas')}
   </div>
-  <div class="abas-res">${aba('notas', 'Notas', vivo.erro + vivo.alerta)}${aba('pend', 'Pendências do cliente', pendCli)}${aba('mov', 'Por movimento')}${aba('dev', 'Devoluções e canceladas', nDev)}<span class="fonte">${r.xml} XML · ${r.lancamentos} lançamentos</span></div>
-  ${(visoes[VISAO] || visoes.notas)()}`;
+  <div class="res-nv" id="resNv">${rail()}<div style="min-width:0">${(visoes[VISAO] || visoes.notas)()}</div></div>`;
   desenharNotas();
   if (manterScroll) window.scrollTo(0, y);
 }
 
 function trocarVisao(k) { VISAO = k; desenharResultado(true); }
-function railCat(cat) {
-  if (RAIL.has(cat) && F.cat === cat) { RAIL.delete(cat); filtrar({cat: '', cod: '', sit: 'problema'}); }
-  else { RAIL.add(cat); filtrar({cat, cod: '', sit: 'problema'}); }
+function railCat(id) {
+  if (RAIL.has(id) && F.grp === id) { RAIL.delete(id); filtrar({grp: '', cat: '', cod: '', sit: 'problema'}); }
+  else { RAIL.add(id); filtrar({grp: id, cat: '', cod: '', sit: 'problema'}); }
+}
+function painelAnteriores() {
+  const p = RES.pendentes_anteriores || []; if (!p.length) return '';
+  const c = p[0].competencia || '';
+  return `<div class="painel" style="margin-bottom:14px"><div class="ph">Ainda fora do livro desde ${esc(c.split('-').reverse().join('/'))} <small>não lançadas no mês anterior que também não entraram neste</small></div>
+    <div style="overflow:auto"><table class="pn-t"><thead><tr><th>Nota</th><th>Fornecedor</th><th>Emissão</th><th class="num">Valor</th></tr></thead><tbody>${p.map(x => `<tr><td><b>${esc(x.numero)}</b></td><td>${esc(x.part_nome || '')}</td><td>${dt(x.emissao)}</td><td class="num">${brl(x.valor)}</td></tr>`).join('')}</tbody></table></div></div>`;
+}
+function painelPorque(ns) {
+  const el = $('#porque'); if (!el) return;
+  const a = F.cod ? ns.flatMap(n => n.aponts).find(x => x.cod === F.cod) : null;
+  if (!a) { el.innerHTML = ''; return; }
+  const rep = ns.filter(n => n.aponts.some(x => x.cod === F.cod && x.repete)), val = ns.flatMap(n => pend(n)).filter(x => x.cod === F.cod).reduce((t, x) => t + (x.valor || 0), 0);
+  el.innerHTML = `<div class="porque"><b>${esc(a.titulo)}</b>${a.fundamento ? `<p>${esc(a.fundamento)}</p>` : ''}<div class="pq-d"><span>${ns.length} nota${ns.length !== 1 ? 's' : ''}</span>${val ? `<span>${rs(val)} envolvidos</span>` : ''}${rep.length ? `<span class="rep">${rep.length} também em ${esc(rep[0].aponts.find(x => x.repete).repete)}: padrão de lançamento</span>` : ''}</div></div>`;
 }
 
 function painelDevolucoes() {
@@ -942,6 +1011,7 @@ function passa(n, ignorar) {
     if (F.sit === 'corrigida' && s !== 'corrigida') return false;
     if (F.sit === 'ok' && !(s === 'ok' || s === 'cancelada')) return false;
   }
+  if (ignorar !== 'cat' && F.grp) { const cs = (GRUPOS_ERRO.find(g => g[0] === F.grp) || [,,[]])[2]; if (!n.aponts.some(a => cs.includes(a.categoria) && (F.sit === 'corrigida' || F.sit === 'todas' || !resol(a.k)))) return false; }
   if (ignorar !== 'cat' && F.cat && !n.aponts.some(a => a.categoria === F.cat && (F.sit === 'corrigida' || F.sit === 'todas' || !resol(a.k)))) return false;
   if (ignorar !== 'nat' && F.nat) {
     const g = {dev: ['dev_venda','dev_compra','dev_compra_forn'], cancelada: ['cancelada'], inut: ['inutilizada','numeracao'], comp: ['complementar','ajuste'], normal: ['normal']}[F.nat] || [];
@@ -960,17 +1030,18 @@ function passa(n, ignorar) {
 function desenharNotas() {
   if (!$('#tbNotas')) return;
   $('#resNv').classList.toggle('sem-rail', RES.notas.some(n => aberto.has(n.id) && passa(n)));  // nota aberta usa a largura toda
+  painelPorque(RES.notas.filter(n => passa(n)));
   const buscando = document.activeElement && document.activeElement.matches && document.activeElement.matches('#filtros input.busca');
   const ns = RES.notas.filter(n => passa(n));
   const cont = (campo, val) => RES.notas.filter(n => passa(n, campo) && (campo === 'mov' ? (!val || n.mov === val) : true)).length;
   const sitN = s => RES.notas.filter(n => passa(n, 'sit') && (s === 'todas' || (s === 'problema' ? ['erro','alerta'].includes(st(n)) : s === 'ok' ? ['ok','cancelada'].includes(st(n)) : st(n) === s))).length;
   const movs = Object.keys(RES.movimentos);
-  const temFiltro = F.mov || F.cod || F.cat || F.nat || F.q || !['problema'].includes(F.sit);
+  const temFiltro = F.mov || F.cod || F.cat || F.grp || F.nat || F.q || !['problema'].includes(F.sit);
   $('#filtros').innerHTML = `
     <input class="busca" placeholder="Buscar nº, fornecedor, CNPJ, chave" value="${esc(F.q)}" oninput="F.q=this.value;F.lim=150;clearTimeout(window._t);window._t=setTimeout(desenharNotas,200)">
     <span class="lim">${ns.length} nota${ns.length !== 1 ? 's' : ''}</span>
     <span class="esp"></span>
-    ${temFiltro ? `<button class="lnk" onclick="filtrar({mov:'',cod:'',cat:'',nat:'',q:'',sit:'problema'})">Limpar filtros</button>` : ''}
+    ${temFiltro ? `<button class="lnk" onclick="filtrar({mov:'',cod:'',cat:'',grp:'',nat:'',q:'',sit:'problema'})">Limpar filtros</button>` : ''}
     <button class="btn peq ${MAIS_FILTROS ? 'pri' : ''}" onclick="MAIS_FILTROS=!MAIS_FILTROS;desenharNotas()">Mais filtros</button>
     ${MAIS_FILTROS ? `<div class="mais-f">
     <div class="seg">${[['problema','Com problema'],['todas','Todas']].map(([k, t]) => `<button class="${F.sit === k ? 'on' : ''}" onclick="filtrar({sit:'${k}'})">${t}<span class="c">${sitN(k)}</span></button>`).join('')}</div>
@@ -990,7 +1061,7 @@ function desenharNotas() {
 function linhaNota(n) {
   const aps = pend(n);
   const s = st(n);
-  const vis = aps.slice(0, 1).map(a => `<span class="tag ${a.sev}" title="${esc(a.detalhe)}">${esc(a.titulo)}</span>`).join('') + (aps.length > 1 ? `<span class="tag info" title="${esc(aps.slice(1).map(a => a.titulo).join('; '))}">+${aps.length - 1}</span>` : '');
+  const vis = aps.slice(0, 1).map(a => `<span class="tag ${a.sev}" title="${esc(a.detalhe)}">${esc(a.titulo)}</span>`).join('') + (aps.some(a => a.repete) ? `<span class="tag info rep" title="O mesmo fornecedor teve este erro no mês anterior">repete</span>` : '') + (aps.length > 1 ? `<span class="tag info" title="${esc(aps.slice(1).map(a => a.titulo).join('; '))}">+${aps.length - 1}</span>` : '');
   const dif = n.valor_xml != null && n.valor_sis != null && Math.abs(n.valor_xml - n.valor_sis) > 0.05;
   return `<tr class="n ${aberto.has(n.id) ? 'aberta' : ''}" onclick="abrir(${n.id})">
     <td><span class="tag ${s}">${SEVR[s]}</span></td>
