@@ -5,6 +5,7 @@
 - analisar(): confronta cada devolução com a nota original referenciada (refNFe): item, quantidade
   (acumulada entre devoluções), preço, ICMS/IPI/ST proporcionais, CFOP correspondente e valor total.
 - numeracao(): inutilizações lançadas ou com nota autorizada e números pulados na série da empresa."""
+import re
 from collections import defaultdict
 from .util import norm, brl, TOL, raiz, numero_doc
 
@@ -20,6 +21,32 @@ DEV_DE = {'101': '201', '103': '201', '105': '201', '109': '201', '111': '201', 
 ROTULO = {'normal': 'Normal', 'dev_venda': 'Devolução de venda', 'dev_compra': 'Devolução de compra',
           'dev_compra_forn': 'Devolução de compra (nota do fornecedor)', 'complementar': 'Complementar', 'ajuste': 'Ajuste',
           'cancelada': 'Cancelada', 'inutilizada': 'Inutilizada'}
+
+
+def _chave_valida(c):
+    """Chave de NF-e/NFC-e/CT-e: UF, modelo e dígito verificador (módulo 11) conferem. Evita tratar número qualquer como chave."""
+    if len(c) != 44 or not 11 <= int(c[:2]) <= 53 or c[20:22] not in ('55', '57', '65'):
+        return False
+    soma = sum(int(x) * (2 + i % 8) for i, x in enumerate(reversed(c[:43])))
+    resto = soma % 11
+    return int(c[43]) == (0 if resto < 2 else 11 - resto)
+
+
+def chaves_rodape(texto, propria=''):
+    """Chaves citadas nas informações adicionais, mesmo escritas em blocos ("3526 0868 4049 ...")."""
+    achadas = []
+    for m in re.finditer(r'\d(?:[ .\-/]?\d){43,}', texto or ''):
+        d = re.sub(r'\D', '', m.group())
+        i = 0
+        while i + 44 <= len(d):
+            c = d[i:i + 44]
+            if _chave_valida(c):
+                if c != propria and c not in achadas:
+                    achadas.append(c)
+                i += 44
+            else:
+                i += 1
+    return achadas
 
 
 def natureza(d, propria, raiz_emp):
@@ -67,8 +94,10 @@ def _casar_item(it, itens_o, mesmo_emitente):
 def analisar(notas, docs, ctx):
     """Acrescenta apontamentos às notas de devolução e devolve o painel de devoluções."""
     por_chave = {n.doc['chave']: n for n in notas if n.doc and n.doc.get('chave')}
-    devs = [n for n in notas if n.doc and n.doc.get('natureza', 'normal').startswith('dev')]
+    # devolução cancelada não devolveu nada: fica fora da análise e do acumulado da nota de origem
+    devs = [n for n in notas if n.doc and n.doc.get('natureza', 'normal').startswith('dev') and not n.doc.get('cancelada')]
     acum = defaultdict(float)       # (chave original, índice do item) -> quantidade devolvida
+    acum_v = defaultdict(float)     # idem, em valor: quando a unidade muda entre as notas (barra × metro), compara por aqui
     total_dev = defaultdict(float)  # chave original -> valor devolvido
     painel = []
     for n in devs:
@@ -76,6 +105,8 @@ def analisar(notas, docs, ctx):
         raw = d['raw']
         nat = d['natureza']
         refs = [r for r in raw.get('refs', []) if r]
+        if not refs:  # sem NFref: a chave no rodapé da nota também identifica a origem
+            refs = chaves_rodape(' '.join(x for x in (raw.get('infAdic'), raw.get('infAdFisco')) if x), d.get('chave', ''))
         orig = [por_chave[r] for r in refs if r in por_chave]
         reg = {'nota': None, 'natureza': nat, 'rotulo': ROTULO[nat], 'numero': d['numero'], 'emissao': d['emissao'],
                'part_nome': d['part_nome'], 'valor': d['valor'], 'originais': [], 'pct': None, 'problemas': 0, 'n': n}
@@ -102,14 +133,21 @@ def analisar(notas, docs, ctx):
                 no, ko, o = itens_o[k]
                 chave_o = no.doc['chave']
                 acum[(chave_o, ko)] += it['qCom']
-                if o['qCom'] and acum[(chave_o, ko)] > o['qCom'] + 1e-6:
-                    n.ap('DEV_QTD', '"%s": devolvido %s no total, a nota %s tem %s.' % (it['xProd'][:40], _q(acum[(chave_o, ko)]), no.doc['numero'], _q(o['qCom'])),
-                         _q(o['qCom']), _q(acum[(chave_o, ko)]), 'Conferir a quantidade devolvida.', valor=(acum[(chave_o, ko)] - o['qCom']) * _vun(o))
-                vo, vd = _vun(o), _vun(it)
-                if abs(vo - vd) > max(0.01, 0.001 * vo):
-                    n.ap('DEV_PRECO', '"%s": preço unitário %s na devolução e %s na nota %s.' % (it['xProd'][:40], brl(vd), brl(vo), no.doc['numero']),
-                         brl(vo), brl(vd), 'A devolução sai pelo mesmo valor da operação original.', valor=abs(vo - vd) * it['qCom'])
-                prop = (it['qCom'] / o['qCom']) if o['qCom'] else 1
+                acum_v[(chave_o, ko)] += it['vProd']
+                outra_unid = bool(o.get('uCom') and it.get('uCom')) and norm(o['uCom']) != norm(it['uCom'])
+                if outra_unid:
+                    if acum_v[(chave_o, ko)] > o['vProd'] + TOL:
+                        n.ap('DEV_QTD', '"%s": devolvido %s no total, a nota %s tem %s (unidades diferentes, %s × %s: comparado pelo valor).' % (it['xProd'][:40], brl(acum_v[(chave_o, ko)]), no.doc['numero'], brl(o['vProd']), o['uCom'], it['uCom']),
+                             brl(o['vProd']), brl(acum_v[(chave_o, ko)]), 'Conferir o valor devolvido.', valor=acum_v[(chave_o, ko)] - o['vProd'])
+                else:
+                    if o['qCom'] and acum[(chave_o, ko)] > o['qCom'] + 1e-6:
+                        n.ap('DEV_QTD', '"%s": devolvido %s no total, a nota %s tem %s.' % (it['xProd'][:40], _q(acum[(chave_o, ko)]), no.doc['numero'], _q(o['qCom'])),
+                             _q(o['qCom']), _q(acum[(chave_o, ko)]), 'Conferir a quantidade devolvida.', valor=(acum[(chave_o, ko)] - o['qCom']) * _vun(o))
+                    vo, vd = _vun(o), _vun(it)
+                    if abs(vo - vd) > max(0.01, 0.001 * vo):
+                        n.ap('DEV_PRECO', '"%s": preço unitário %s na devolução e %s na nota %s.' % (it['xProd'][:40], brl(vd), brl(vo), no.doc['numero']),
+                             brl(vo), brl(vd), 'A devolução sai pelo mesmo valor da operação original.', valor=abs(vo - vd) * it['qCom'])
+                prop = (it['vProd'] / o['vProd'] if o['vProd'] else 1) if outra_unid else ((it['qCom'] / o['qCom']) if o['qCom'] else 1)
                 io_, ipo, sto, po = _imp(o)
                 id_, ipd, std, pd = _imp(it)
                 for cod, nome, esp, real in (('DEV_ICMS', 'ICMS', io_ * prop, id_), ('DEV_IPI', 'IPI', ipo * prop, ipd), ('DEV_ST', 'ICMS-ST', sto * prop, std)):

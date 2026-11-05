@@ -67,7 +67,7 @@ def _nfe(root, caminho):
         'emit': {'cnpj': _cnpj(emit), 'nome': _t(emit, 'xNome'), 'uf': _t(emit, 'enderEmit/UF'), 'ie': _t(emit, 'IE'), 'crt': _t(emit, 'CRT'), 'mun': _t(emit, 'enderEmit/cMun')},
         'dest': {'cnpj': _cnpj(dest) if dest is not None else '', 'nome': _t(dest, 'xNome'), 'uf': _t(dest, 'enderDest/UF'), 'ie': _t(dest, 'IE'), 'indIEDest': _t(dest, 'indIEDest'), 'mun': _t(dest, 'enderDest/cMun')},
         'totais': {k: _n(tot, k) for k in ['vBC','vICMS','vICMSDeson','vFCP','vBCST','vST','vFCPST','vProd','vFrete','vSeg','vDesc','vII','vIPI','vIPIDevol','vPIS','vCOFINS','vOutro','vNF','vFCPUFDest','vICMSUFDest','vICMSUFRemet']},
-        'infAdic': _t(inf, 'infAdic/infCpl'),
+        'infAdic': _t(inf, 'infAdic/infCpl'), 'infAdFisco': _t(inf, 'infAdic/infAdFisco'),
         'itens': [],
         'ibscbs': inf.find('.//IBSCBS') is not None or inf.find('.//IBSCBSTot') is not None,
         'protocolo': _t(root, './/protNFe/infProt/cStat'),
