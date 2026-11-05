@@ -725,10 +725,15 @@ def regras_nfe(n, d, L, ctx):
             _regras_destino(n, x, s, idx, ctx)
         # ---- CST ICMS
         if por_cst and s['cst']:
-            ac = aceitos_cst(x)
+            # uso e consumo entra sem crédito, em 41 ou 60, qualquer que seja o CST do fornecedor
+            uso_consumo = entrada and suf in USO_CONSUMO
+            ac = {'41', '60'} if uso_consumo else aceitos_cst(x)
             if s['cst'] not in ac:
                 pref = sorted(ac, key=lambda c: (c != x['cst'][-2:], c))[0] if ac else ''
-                if entrada:
+                if uso_consumo:
+                    n.ap('CST_ICMS', 'Entrada classificada como uso e consumo (%s) entra com CST 41 ou 60, qualquer que seja o CST da nota.' % s['cfop'],
+                         x['cst'], s['orig'] + s['cst'], 'Usar CST 41 ou 60.', idx, 'cst')
+                elif entrada:
                     txt = 'Nota veio com %s %s (%s). O CST lançado não é compatível.' % ('CSOSN' if x['cst'] in CSOSN else 'CST', x['cst'], CST_DESC.get(x['cst'], ''))
                     if s['cst'] in ('40', '41', '50') and x['cst'] not in ('40', '41', '50', '300', '400', '102', '103'):
                         txt = 'Nota tributada (%s %s, %s) lançada como %s (%s). Para não tomar o crédito o CST continua o da tributação; o crédito é que fica zerado.' % (
