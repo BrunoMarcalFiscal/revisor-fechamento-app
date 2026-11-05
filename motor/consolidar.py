@@ -18,8 +18,8 @@ CAT_ROT = dict(CATEGORIAS)
 
 CATEGORIA = {}
 for cat, cods in {
-    'presenca': ['NAO_LANCADA', 'NAO_LANCADA_MES_ANT', 'FORA_COMPETENCIA', 'SEM_XML', 'SEM_XML_PDF', 'PDF_NAO_LANCADO', 'DUPLICIDADE',
-                 'OUTRA_EMPRESA', 'CASOU_SO_NUMERO', 'PARTE_NAO_LANCADA', 'LINHA_SOBRANDO'],
+    'presenca': ['NAO_LANCADA', 'NAO_LANCADA_MES_ANT', 'FORA_COMPETENCIA', 'SEM_XML', 'FATURA_SEM_XML', 'SEM_XML_PDF', 'PDF_NAO_LANCADO', 'DUPLICIDADE',
+                 'OUTRA_EMPRESA', 'CASOU_SO_NUMERO', 'NO_LIVRO_SAIDAS', 'LIVRO_SAIDAS_VALOR', 'LIVRO_SAIDAS_NUMERO', 'PARTE_NAO_LANCADA', 'LINHA_SOBRANDO'],
     'cadastro': ['PARTICIPANTE', 'PARTICIPANTE_FILIAL', 'CHAVE', 'SERIE', 'DATA_ANTERIOR', 'DATA_EMISSAO'],
     'valores': ['VALOR_TOTAL', 'LOCACAO_VALOR', 'VALOR_LINHA', 'SERVICO_LIQUIDO'],
     'cfop': ['CFOP_SAIDA', 'CFOP_UF', 'CFOP_UF_PRESENCIAL', 'CFOP_INCOMPATIVEL', 'CFOP_BRANCO', 'CFOP_FRETE', 'DESTINO_COMBUSTIVEL',
@@ -88,6 +88,8 @@ FUNDAMENTO = {
     'DEV_SEM_REF': 'Sem a nota de origem referenciada não dá para conferir itens, quantidade e imposto da devolução contra a operação original.',
     'DEV_FORN_NAO_LANCADA': 'Quando o fornecedor emite a nota de entrada da devolução, a compra e a devolução precisam estar coerentes no livro.',
     'DEVOLVIDA_INTEGRAL': 'Compra devolvida por inteiro tem efeito zero, mas se uma nota for lançada a outra também precisa ser.',
+    'LIVRO_SAIDAS_VALOR': 'A nota que está no livro de saídas precisa ter o mesmo valor do documento.',
+    'LIVRO_SAIDAS_NUMERO': 'Sem chave, CNPJ ou nome no livro, notas de fornecedores diferentes podem ter o mesmo número.',
     'CASOU_SO_NUMERO': 'Sem CNPJ nem chave na planilha, o vínculo é só pelo número, e notas de fornecedores diferentes podem ter o mesmo número.',
 }
 

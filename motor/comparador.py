@@ -11,9 +11,9 @@ from .util import num, digitos, numero_doc, raiz, igual, data_iso, brl, TOL, nor
 from .regras_base import (sufixos_entrada_aceitos, cfop_entrada_esperado, desc_cfop, CST_ENTRADA, CSOSN, CST_COM_ST, CST_DESC, USO_CONSUMO, ATIVO,
                           REVENDA_INDUSTRIA, COM_ST, FRETE, COMBUSTIVEL_CONSUMO, COMPRAS, PC_CREDITO, PC_SEM_CREDITO, PC_FORN_SEM_CREDITO, ALIQ_PIS_NC, ALIQ_COFINS_NC)
 
-CARDS = ['entrada', 'saida', 'frete', 'prestado', 'tomado', 'diversos', 'planilha', 'serv_entrada', 'serv_saida', 'planilha_servicos', 'planilha_locacoes']
+CARDS = ['entrada', 'saida', 'frete', 'prestado', 'tomado', 'diversos', 'planilha', 'serv_entrada', 'serv_saida', 'planilha_servicos', 'planilha_locacoes', 'planilha_livro_saidas']
 # pasta da planilha -> prefixo da chave dos ajustes de colunas
-PLANILHAS = [('planilha', ''), ('serv_entrada', 'serv_entrada/'), ('serv_saida', 'serv_saida/'), ('planilha_servicos', 'servicos/'), ('planilha_locacoes', 'locacoes/')]
+PLANILHAS = [('planilha', ''), ('serv_entrada', 'serv_entrada/'), ('serv_saida', 'serv_saida/'), ('planilha_servicos', 'servicos/'), ('planilha_locacoes', 'locacoes/'), ('planilha_livro_saidas', 'livro_saidas/')]
 SERV_CARDS = {'serv_entrada': 'tomado', 'serv_saida': 'prestado', 'planilha_servicos': None}
 MOV_NOME = {'entrada': 'Entradas', 'saida': 'Saídas', 'frete': 'Frete de entrada', 'prestado': 'Serviços prestados',
             'tomado': 'Serviços tomados', 'diversos': 'Documentos diversos', 'indef': 'Sem movimento definido'}
@@ -24,6 +24,7 @@ CATALOGO = {
     'NAO_LANCADA_MES_ANT': ('alerta', 'Nota de mês anterior não encontrada no lançamento'),
     'FORA_COMPETENCIA': ('alerta', 'XML de outra competência'),
     'SEM_XML': ('alerta', 'Lançamento sem XML'),
+    'FATURA_SEM_XML': ('info', 'Fatura de concessionária, sem XML'),
     'SEM_XML_PDF': ('alerta', 'Lançamento sem XML (consta no PDF)'),
     'PDF_NAO_LANCADO': ('erro', 'Documento do PDF não lançado'),
     'DUPLICIDADE': ('erro', 'Nota lançada mais de uma vez'),
@@ -38,6 +39,9 @@ CATALOGO = {
     'CHAVE': ('erro', 'Chave de acesso diferente do XML'),
     'SERIE': ('alerta', 'Série diferente do XML'),
     'CASOU_SO_NUMERO': ('alerta', 'Casou só pelo número da nota'),
+    'NO_LIVRO_SAIDAS': ('info', 'Nota consta no livro de saídas'),
+    'LIVRO_SAIDAS_VALOR': ('alerta', 'Nota no livro de saídas com outro valor'),
+    'LIVRO_SAIDAS_NUMERO': ('alerta', 'Livro de saídas: casou só pelo número'),
     'MANUAL': ('info', 'Nota lançada à mão'),
     'NFSE_REPETIDA': ('alerta', 'NFS-e repetida: provável cancelada e reemitida'),
     'CANCEL_MANUAL': ('info', 'Marcada como cancelada por você'),
@@ -364,8 +368,58 @@ def ler_planilhas(sessao, ajustes):
                         r['mov_forcado'] = SERV_CARDS[card]
                 elif card == 'planilha_locacoes':
                     r['origem'] = 'locacoes'
+                elif card == 'planilha_livro_saidas':
+                    r['origem'] = 'livro_saidas'
                 regs.append(r)
     return descs, regs
+
+
+def _indice_livro_saidas(regs):
+    """Livro de saídas: só consulta de quais notas existem nele (retornos feitos pelo portal de vendas). Não entra na apuração nem no faturamento."""
+    idx = {'chave': defaultdict(list), 'numero': defaultdict(list)}
+    for r in regs:
+        if r.get('chave'):
+            idx['chave'][r['chave']].append(r)
+        if r.get('numero'):
+            idx['numero'][r['numero'].lstrip('0')].append(r)
+    return idx
+
+
+def _no_livro_saidas(d, idx):
+    """Acha a nota no livro: chave, ou número + CNPJ, ou número + nome. Devolve (linhas, como); número sozinho só quando o livro não identifica o participante."""
+    if d.get('chave') and d['chave'] in idx['chave']:
+        return idx['chave'][d['chave']], 'chave'
+    linhas = idx['numero'].get(str(d.get('numero') or '').lstrip('0'))
+    if not linhas:
+        return None, ''
+    raiz_d = digitos(d.get('part_cnpj'))[:8]
+    por_cnpj = [r for r in linhas if r.get('cnpj') and digitos(r['cnpj'])[:8] == raiz_d]
+    if por_cnpj:
+        return por_cnpj, 'cnpj'
+    nome_d = norm(d.get('part_nome')).split()[:1]
+    por_nome = [r for r in linhas if not r.get('cnpj') and not r.get('chave') and r.get('participante') and norm(r['participante']).split()[:1] == nome_d]
+    if nome_d and por_nome:
+        return por_nome, 'nome'
+    soltas = [r for r in linhas if not r.get('cnpj') and not r.get('chave') and not r.get('participante')]
+    return (soltas, 'numero') if soltas else (None, '')
+
+
+CONCESSIONARIAS = {'copel', 'celesc', 'cemig', 'cpfl', 'enel', 'light', 'energisa', 'equatorial', 'neoenergia', 'coelba', 'celpe', 'cosern', 'elektro', 'edp', 'rge',
+                   'vivo', 'telefonica', 'claro', 'nio', 'oi', 'tim', 'algar', 'embratel', 'sercomtel', 'net',
+                   'sanepar', 'sabesp', 'copasa', 'cedae', 'corsan', 'casan', 'embasa', 'compesa', 'cagece', 'caesb', 'saneago', 'samae', 'semae', 'dmae', 'daae', 'saae',
+                   'compagas', 'comgas', 'naturgy', 'scgas', 'sulgas'}
+
+
+def _eh_fatura(cfop, modelo, participante, descricao):
+    """Energia, água, gás, telefone e internet não têm XML de NF-e: CFOP próprio (x25x, x30x), modelo (06, 21, 22, 28, 29, 62, 66), concessionária ou conta do lançamento."""
+    if cfop[1:] in ('251', '252', '253', '254', '255', '256', '257', '301', '302', '303', '304', '305', '306', '307'):
+        return True
+    if modelo.split()[:1] and modelo.split()[0].lstrip('0') in ('6', '21', '22', '28', '29', '62', '66'):
+        return True
+    nome = norm(participante).split()
+    if nome and nome[0] in CONCESSIONARIAS:
+        return True
+    return bool(re.search(r'\b(energia eletrica|agua e esgoto|telefon|internet|telecom)', norm(descricao)))
 
 
 def _dbr(d):
@@ -1082,11 +1136,13 @@ def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None):
         vistos.add(k); unicos.append(d)
     docs = unicos
     descs, regs = ler_planilhas(sessao, ajustes)
+    livro_saidas = _indice_livro_saidas([r for r in regs if r.get('origem') == 'livro_saidas'])
+    regs = [r for r in regs if r.get('origem') != 'livro_saidas']
     loc_regs = [r for r in regs if r.get('origem') == 'locacoes']
     serv_rel = _servicos_relatorio([r for r in regs if r.get('origem') == 'servicos'])
     regs = [r for r in regs if r.get('origem') != 'locacoes']
     cols = set()
-    for dsc in descs:
+    for dsc in [x for x in descs if x.get('card') != 'planilha_livro_saidas']:
         if dsc.get('utilizavel'):
             cols |= set(dsc['mapa'].keys())
     lancs = agrupar_lancamentos(regs)
@@ -1129,6 +1185,16 @@ def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None):
         if not Ls:
             if d['cancelada'] or d.get('denegada'):
                 n.status_extra = 'cancelada'
+            elif d['empresa_envolvida'] and _no_livro_saidas(d, livro_saidas)[0]:
+                ls, como = _no_livro_saidas(d, livro_saidas)
+                ref = '%s, linha %s' % (ls[0].get('arquivo', ''), ', '.join(str(r.get('linha')) for r in ls[:5]))
+                vl = sum(r.get('valor_contabil', 0) or 0 for r in ls)
+                if como == 'numero':
+                    n.ap('LIVRO_SAIDAS_NUMERO', 'O livro de saídas não traz chave, CNPJ nem nome: o vínculo foi feito só pelo número (%s).' % ref, d['part_nome'], 'número %s' % d['numero'], 'Conferir se é a mesma nota.', valor=d['valor'])
+                elif vl and abs(vl - d['valor']) > TOL:
+                    n.ap('LIVRO_SAIDAS_VALOR', 'A nota está no livro de saídas (%s), mas com valor diferente do XML.' % ref, d['valor'], vl, 'Conferir o valor lançado no portal de vendas.', valor=abs(vl - d['valor']))
+                else:
+                    n.ap('NO_LIVRO_SAIDAS', 'Consta no livro de saídas (%s). Fora das não lançadas.' % ref, d['valor'], vl or '', '')
             elif d['mov'] in ('saida', 'prestado') and competencia and _mes(d['emissao']) != competencia:
                 n.ap('FORA_COMPETENCIA', 'Emitida em %s; o fechamento é de %s.' % (_mes(d['emissao']), competencia), d['emissao'], '', 'Conferir se o XML é deste fechamento.')
             elif d['mov'] in ('entrada', 'frete', 'tomado') and competencia and _mes(d['emissao']) < competencia:
@@ -1243,8 +1309,10 @@ def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None):
             cf0, mod0 = (p0.get('cfop') or ''), norm(p0.get('modelo'))
             if mod0.startswith('ct') or mod0.startswith('57') or cf0[1:] in FRETE:
                 txt, cor = 'CT-e lançado sem XML: o quadro de Frete de Entrada não tem o XML deste conhecimento.', 'Enviar os XML de CT-e no quadro Frete de Entrada.'
-            elif cf0[1:] in ('251', '252', '253', '254', '255', '256', '257', '301', '302', '303', '304', '305', '306', '307'):
-                txt, cor = 'Energia elétrica ou comunicação (CFOP %s): esses documentos costumam não ter XML de NF-e (NF3e/NFCom ou modelo 06/21/22).' % cf0, 'Conferir pela fatura (PDF) no quadro Documentos Diversos.'
+            elif _eh_fatura(cf0, mod0, p0.get('participante'), p0.get('descricao')):
+                n.ap('FATURA_SEM_XML', 'Fatura de concessionária (energia, água, gás, telefone ou internet): não tem XML de NF-e.', '', L['valor'], '', valor=0)
+                notas.append(n)
+                continue
             elif L['chave'] and L['chave'][2:6] < (competencia[2:4] + competencia[5:7] if competencia else '0000'):
                 txt, cor = 'Nota de %s/%s lançada neste mês; o XML não veio no lote.' % (L['chave'][4:6], '20' + L['chave'][2:4]), 'Enviar o XML no quadro de Entradas (pode ser de mês anterior).'
             else:

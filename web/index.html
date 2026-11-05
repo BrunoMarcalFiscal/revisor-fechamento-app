@@ -543,6 +543,7 @@ const CARDS = [
   {id:'diversos', t:'Documentos Diversos',       s:'PDF geral de notas (DANFE, DACTE, NFS-e)', ext:'.pdf ou .zip', acc:'.pdf,.zip,.xml'},
   {id:'planilha', t:'Planilha do sistema',       s:'Opcional. Com ela, cada nota é comparada ao lançamento do sistema; sem ela, o fechamento sai só pelas notas', ext:'.xlsx, .xls ou .csv', acc:'.xlsx,.xls,.xlsm,.csv,.txt,.zip'},
   {id:'planilha_locacoes', t:'Relatório de locações', s:'Relatório do sistema do cliente: só o número da nota, o cliente e o valor da locação', ext:'.xlsx, .xls ou .csv', acc:'.xlsx,.xls,.xlsm,.csv,.txt,.zip'},
+  {id:'planilha_livro_saidas', t:'Livro de saídas', s:'Retornos feitos pelo portal de vendas: a nota que constar aqui sai das não lançadas. Não entra na apuração nem no faturamento', ext:'.xlsx, .xls ou .csv', acc:'.xlsx,.xls,.xlsm,.csv,.txt,.zip'},
   {id:'serv_saida', t:'Relatório de saída de serviços', s:'Serviços prestados, do sistema do cliente (PDF ou Excel): confere as NFS-e e alimenta PIS/COFINS e a SCP', ext:'.pdf, .xlsx, .xls ou .csv', acc:'.pdf,.xlsx,.xls,.xlsm,.csv,.txt,.zip'},
   {id:'serv_entrada', t:'Relatório de entrada de serviços', s:'Serviços tomados, do sistema do cliente (PDF ou Excel): crédito de PIS/COFINS e retenções a recolher', ext:'.pdf, .xlsx, .xls ou .csv', acc:'.pdf,.xlsx,.xls,.xlsm,.csv,.txt,.zip'},
 ];
@@ -629,6 +630,7 @@ function desenharCards() {
 
 function desenharPlanilha(card) {
   const minhas = PL ? PL.abas.map((a, k) => [a, k]).filter(([a]) => (a.card || 'planilha') === card) : [];
+  if (!minhas.length && card === 'planilha_livro_saidas') return `<div class="vazio">Envie o livro de saídas do sistema do cliente. Procuro cada nota não lançada nele pela chave, ou pelo número com o CNPJ ou nome.</div>`;
   if (!minhas.length && card === 'planilha_locacoes') return `<div class="vazio">Envie o relatório de locações do sistema do cliente. Leio só o número da nota, o cliente e o valor da locação; se o relatório trouxer outras vendas junto (ex.: NFS-e), só as linhas de locação entram. Se o layout for outro, ajuste as colunas aqui e eu lembro nos próximos meses.</div>`;
   if (!minhas.length && card.startsWith('serv_')) return `<div class="vazio">Envie o relatório de ${card === 'serv_saida' ? 'saída (serviços prestados)' : 'entrada (serviços tomados)'} em PDF ou Excel. Reconheço número, data, ${card === 'serv_saida' ? 'tomador' : 'prestador'}, CNPJ/CPF, valor, base e valor do ISS, ISS retido, IRRF, CSLL, PIS, COFINS, INSS, código do serviço e líquido. PDF precisa ter texto (não escaneado).</div>`;
   if (!minhas.length) return card === 'planilha_servicos'
@@ -640,7 +642,7 @@ function desenharPlanilha(card) {
     const ordem = PL.campos.map(c => c.campo);
     const campos = Object.keys(a.mapa || {}).sort((x, y) => ordem.indexOf(x) - ordem.indexOf(y));
     const servico = !campos.includes('cfop') && (campos.includes('valor_iss') || campos.includes('iss_retido') || /servi|nfs/i.test(a.aba));
-    const falta = (card.startsWith('serv_') ? IMPORTANTES_SV : card === 'planilha_locacoes' ? ['numero','valor_contabil','participante'] : servico || card === 'planilha_servicos' ? IMPORTANTES_SV : IMPORTANTES).filter(c => !campos.includes(c) && !(c === 'chave' && campos.includes('numero')) && !(c === 'numero' && campos.includes('chave')));
+    const falta = (card.startsWith('serv_') ? IMPORTANTES_SV : card === 'planilha_locacoes' ? ['numero','valor_contabil','participante'] : card === 'planilha_livro_saidas' ? ['numero','participante','valor_contabil'] : servico || card === 'planilha_servicos' ? IMPORTANTES_SV : IMPORTANTES).filter(c => !campos.includes(c) && !(c === 'chave' && campos.includes('numero')) && !(c === 'numero' && campos.includes('chave')));
     const orig = {salvo:'layout lembrado', ajustado:'ajustado por você', automatico:'reconhecido automático'}[a.origem] || '';
     return `<div class="aba-pl">
       <div class="l1"><b>${esc(a.aba)}</b><span class="m">${esc(a.arquivo)} · ${a.linha_cab != null ? 'cabeçalho na linha ' + (a.linha_cab + 1) + ' · ' + a.linhas_dados + ' linhas · ' + orig : 'cabeçalho não encontrado'}</span>

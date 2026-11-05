@@ -251,7 +251,7 @@ def saldo_anterior(res):
 EXTS = {'entrada': {'.xml'}, 'saida': {'.xml'}, 'frete': {'.xml'}, 'prestado': {'.xml'}, 'tomado': {'.xml'},
         'diversos': {'.pdf', '.xml'}, 'planilha': {'.xlsx', '.xlsm', '.xls', '.csv', '.txt'},
         'planilha_servicos': {'.xlsx', '.xlsm', '.xls', '.csv', '.txt', '.pdf'}, 'serv_entrada': {'.xlsx', '.xlsm', '.xls', '.csv', '.txt', '.pdf'},
-        'serv_saida': {'.xlsx', '.xlsm', '.xls', '.csv', '.txt', '.pdf'}, 'planilha_locacoes': {'.xlsx', '.xlsm', '.xls', '.csv', '.txt'}}
+        'serv_saida': {'.xlsx', '.xlsm', '.xls', '.csv', '.txt', '.pdf'}, 'planilha_locacoes': {'.xlsx', '.xlsm', '.xls', '.csv', '.txt'}, 'planilha_livro_saidas': {'.xlsx', '.xlsm', '.xls', '.csv', '.txt'}}
 
 
 def _json(path, padrao):
