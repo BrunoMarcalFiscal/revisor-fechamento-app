@@ -562,6 +562,10 @@ label.chk{display:flex!important;flex-direction:row!important;align-items:center
   .side-pe{flex-direction:row;border:0;padding:0;margin-left:auto}.side-pe button span{display:none}.side-pe button{width:auto}
   header.pg{padding:12px 14px;position:static} main{padding:14px 12px 40px}
 }
+.pt-t td{vertical-align:middle}.pt-vz{color:var(--fraco)}
+.pt-meses{display:flex;flex-wrap:wrap;gap:4px;min-width:140px}
+.pt-mes{border:1px solid var(--borda);background:#fff;border-radius:4px;padding:2px 7px;font:inherit;font-size:12px;cursor:pointer;color:inherit}
+.pt-mes:hover{border-color:#2563A8;color:#2563A8}.pt-mes.on{background:#E8F0FB;border-color:#2563A8;color:#2563A8;font-weight:600}
 </style>
 </head>
 <body>
@@ -571,6 +575,8 @@ label.chk{display:flex!important;flex-direction:row!important;align-items:center
   <div class="emp" id="topEmp"><div class="emp-vz">Nenhum fechamento aberto</div></div>
   <span id="situacao" class="situacao"></span>
   <nav class="nav">
+    <div class="grp grp-portal oculto">Lucro Real</div>
+    <button id="abaPortal" class="oculto" onclick="abrirPortal()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18M5 21V8l7-5 7 5v13"/><path d="M9 21v-6h6v6"/></svg><span>Painel</span></button>
     <div class="grp">Conferência</div>
     <button id="abaDocs" class="on" onclick="mostrar('docs')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg><span>Documentos</span></button>
     <button id="abaRes" onclick="mostrar('res')" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg><span>Resultado</span><b class="badge" id="badgeRes"></b></button>
@@ -613,6 +619,7 @@ label.chk{display:flex!important;flex-direction:row!important;align-items:center
 <section id="secScp" class="oculto"></section>
 <section id="secRel" class="oculto"></section>
 <section id="secHist" class="oculto"></section>
+<section id="secPortal" class="oculto"></section>
 </main>
 </div></div>
 <input type="file" id="arq" multiple class="oculto">
@@ -811,11 +818,13 @@ async function enviar(card, arquivos) {
 
 async function remover(card, nome) { EST = await api(`/api/remover?card=${card}&nome=${encodeURIComponent(nome)}`, {method:'POST'}); if (card.startsWith('planilha')) PL = await api('/api/planilha'); desenharCards(); }
 async function limpar(card) { if (!confirm('Remover todos os arquivos deste quadro?')) return; EST = await api(`/api/limpar?card=${card}`, {method:'POST'}); if (card.startsWith('planilha')) PL = await api('/api/planilha'); desenharCards(); }
-async function novo() {
-  if (!confirm('Começar um fechamento novo? O fechamento atual fica guardado em "Fechamentos" e a tela é limpa.')) return;
+async function novo(cnpj, nome) {
+  if (!confirm(nome ? `Começar um fechamento novo de ${nome}? O fechamento aberto agora fica guardado e a tela é limpa.` : 'Começar um fechamento novo? O fechamento atual fica guardado em "Fechamentos" e a tela é limpa.')) return;
   EST = await api('/api/limpar?card=tudo', {method:'POST'}); PL = await api('/api/planilha'); RES = null; COR = {};
   $('#inCnpj').value = ''; $('#inComp').value = ''; $('#topEmp').innerHTML = '<div class="emp-vz">Nenhum fechamento aberto</div>'; $('#badgeRes').textContent = ''; MAN = []; MAN_ED = null; desenharManuais();
-  $('#abaRes').disabled = true; $('#abaApu').disabled = true; $('#abaPnl').disabled = true; $('#abaRel').disabled = true; $('#abaEst').disabled = true; $('#abaScp').disabled = true; APU = null; desenharSituacao(); $('#btnExport').disabled = true; $('#btnErros').disabled = true; $('#btnCliente').disabled = true; mostrar('docs'); desenharCards(); msg('');
+  $('#abaRes').disabled = true; $('#abaApu').disabled = true; $('#abaPnl').disabled = true; $('#abaRel').disabled = true; $('#abaEst').disabled = true; $('#abaScp').disabled = true; APU = null; desenharSituacao(); $('#btnExport').disabled = true; $('#btnErros').disabled = true; $('#btnCliente').disabled = true; $('#abaScp').style.display = scpOk(cnpj) ? '' : 'none'; mostrar('docs'); desenharCards(); msg('');
+  if (typeof cnpj === 'string' && cnpj) { $('#inCnpj').value = cnpj; const d = document.querySelector('.doc-op'); if (d) d.open = true;
+    $('#topEmp').innerHTML = `<b>${esc(nome || 'Empresa')}</b><span>CNPJ ${esc(cnpjFmt(cnpj))}</span><span class="emp-comp">Fechamento novo</span>`; msg('Envie os arquivos do mês, confira a competência e clique em Calcular.'); }
 }
 function msg(t, erro) { const m = $('#msg'); m.textContent = t; m.className = 'msg' + (erro ? ' erro' : ''); }
 
@@ -842,12 +851,13 @@ async function calcular() {
 }
 
 function mostrar(q) {
-  $('#secDocs').classList.toggle('oculto', q !== 'docs'); $('#secRes').classList.toggle('oculto', q !== 'res'); $('#secApu').classList.toggle('oculto', q !== 'apu'); $('#secPnl').classList.toggle('oculto', q !== 'pnl'); $('#secRel').classList.toggle('oculto', q !== 'rel'); $('#secEst').classList.toggle('oculto', q !== 'est'); $('#secScp').classList.toggle('oculto', q !== 'scp'); $('#secHist').classList.toggle('oculto', q !== 'hist');
+  $('#secDocs').classList.toggle('oculto', q !== 'docs'); $('#secRes').classList.toggle('oculto', q !== 'res'); $('#secApu').classList.toggle('oculto', q !== 'apu'); $('#secPnl').classList.toggle('oculto', q !== 'pnl'); $('#secRel').classList.toggle('oculto', q !== 'rel'); $('#secEst').classList.toggle('oculto', q !== 'est'); $('#secScp').classList.toggle('oculto', q !== 'scp'); $('#secHist').classList.toggle('oculto', q !== 'hist'); $('#secPortal').classList.toggle('oculto', q !== 'portal'); $('#abaPortal').classList.toggle('on', q === 'portal');
   $('#abaDocs').classList.toggle('on', q === 'docs'); $('#abaRes').classList.toggle('on', q === 'res'); $('#abaApu').classList.toggle('on', q === 'apu'); $('#abaPnl').classList.toggle('on', q === 'pnl'); $('#abaRel').classList.toggle('on', q === 'rel'); $('#abaEst').classList.toggle('on', q === 'est'); $('#abaScp').classList.toggle('on', q === 'scp');
   const PG = {docs: ['Documentos', 'Envie os arquivos do mês e clique em Calcular.'], res: ['Resultado da conferência', 'Cada nota contra o lançamento do sistema: o que está errado, onde e como corrigir.'],
     apu: ['Apuração de ICMS e IPI', 'Livro por CFOP e CST, ajustes da apuração e o saldo do mês.'], scp: ['Estratégia SCP', 'Matriz no Lucro Real × SCP no Lucro Presumido, no layout da planilha de fechamento.'],
     pnl: ['Painel da empresa', 'Faturamento de produtos, serviços e locações, impostos e quem compra e vende.'], est: ['Visão estratégica', 'Evolução, margem, créditos, projeções e riscos do mês.'],
-    rel: ['Relatórios', 'Demonstrativos em PDF e Excel.'], hist: ['Fechamentos', 'Fechamentos guardados por empresa e competência.']};
+    rel: ['Relatórios', 'Demonstrativos em PDF e Excel.'], hist: ['Fechamentos', 'Fechamentos guardados por empresa e competência.'],
+    portal: ['Fechamento Lucro Real', 'As empresas do escritório no Lucro Real: abra o mês ou comece um novo.']};
   if (PG[q]) { $('#pgTit').textContent = PG[q][0]; $('#pgSub').textContent = PG[q][1]; }
   if (q === 'scp') { SCPR = null; desenharSCP(); }
   if (q === 'est') desenharEstrategico();
@@ -863,7 +873,7 @@ function abrirResultado() {
   const e = RES.empresa || {};
   $('#topEmp').innerHTML = `<b title="${esc(e.nome || '')}">${esc(e.nome || 'Empresa')}</b><span>CNPJ ${esc(cnpjFmt(e.cnpj))}${e.uf ? ' · ' + esc(e.uf) : ''}</span><span class="emp-comp">Competência ${esc((RES.competencia || '').split('-').reverse().join('/'))}</span>`;
   $('#abaRes').disabled = false; $('#btnExport').disabled = false; $('#btnErros').disabled = false; $('#btnCliente').disabled = false; $('#abaApu').disabled = !(RES.apuracao && RES.apuracao.tem_planilha) || RES.tem_icms === false;
-  $('#abaApu').title = RES.tem_icms === false ? 'Sem NF-e nem CT-e no mês: ICMS e IPI não se aplicam (só serviços).' : ''; $('#abaPnl').disabled = !RES.painel; $('#abaRel').disabled = false; $('#abaEst').disabled = COLAB(); $('#abaScp').disabled = COLAB(); desenharSituacao();
+  $('#abaApu').title = RES.tem_icms === false ? 'Sem NF-e nem CT-e no mês: ICMS e IPI não se aplicam (só serviços).' : ''; $('#abaPnl').disabled = !RES.painel; $('#abaRel').disabled = false; $('#abaEst').disabled = COLAB(); $('#abaScp').disabled = COLAB(); $('#abaScp').style.display = scpOk(e.cnpj) ? '' : 'none'; desenharSituacao();
   $('#badgeRes').textContent = RES.resumo.com_erro || '';
   VISAO = 'notas';
   desenharResultado(); mostrar('res');
@@ -1390,6 +1400,26 @@ async function abrirHistorico() {
     : '<div class="vz-p">Nenhum fechamento salvo ainda. O primeiro é guardado ao clicar em Calcular.</div>'}</div>`;
   mostrar('hist');
 }
+// ------------------------------------------------------------------ painel do Lucro Real (login do escritório)
+let PORTAL = null;
+const scpOk = cnpj => !PERFIL.portal || !PORTAL || (PORTAL.empresas || []).some(e => e.scp && e.cnpj.slice(0, 8) === String(cnpj || '').replace(/\D/g, '').slice(0, 8));
+async function abrirPortal() {
+  PORTAL = await api('/api/portal');
+  const st = {'em revisão': 'alerta', 'corrigido': 'ok', 'fechado': 'ok'}, comp = c => (c || '').split('-').reverse().join('/');
+  const at = PORTAL.atual || {};
+  $('#secPortal').innerHTML = `<div class="painel"><div class="ph">Empresas <small>${PORTAL.empresas.length} no Lucro Real${PERFIL.adm ? ' · você entrou como ADM' : ''}</small></div>
+    <table class="pn-t pt-t"><thead><tr><th>Empresa</th><th>CNPJ</th><th>Estratégia</th><th>Último mês</th><th>Situação</th><th class="num">Pendentes</th><th>Meses guardados</th><th></th></tr></thead><tbody>
+    ${PORTAL.empresas.map((e, i) => { const u = e.fechamentos[0];
+      return `<tr><td><b>${esc(e.nome)}</b>${u && at.id === u.id ? ' <span class="tag info">aberto</span>' : ''}</td><td style="white-space:nowrap">${esc(cnpjFmt(e.cnpj))}</td>
+      <td style="white-space:nowrap">${e.scp ? '<span class="tag ok">Estratégia SCP</span>' : '<span class="pt-vz">–</span>'}</td>
+      <td>${u ? esc(comp(u.competencia)) : '<span class="pt-vz">nenhum</span>'}</td>
+      <td>${u ? `<span class="tag ${st[u.status] || 'info'}">${esc(u.status)}</span>` : ''}</td>
+      <td class="num">${u ? (u.pendentes ? `<b style="color:var(--erro)">${u.pendentes}</b>` : '<span style="color:var(--ok)">0</span>') : ''}</td>
+      <td><div class="pt-meses">${e.fechamentos.map(m => `<button class="pt-mes${at.id === m.id ? ' on' : ''}" title="${esc(m.status)} · salvo em ${esc(m.salvo_em || '')}" onclick="abrirFechamento('${esc(m.id)}', ${at.id === m.id})">${esc(comp(m.competencia))}</button>`).join('') || '<span class="pt-vz">–</span>'}</div></td>
+      <td style="white-space:nowrap">${u ? `<button class="btn peq pri" onclick="abrirFechamento('${esc(u.id)}', ${at.id === u.id})">Abrir</button> ` : ''}<button class="btn peq" onclick="novo('${esc(e.cnpj)}', PORTAL.empresas[${i}].nome)">Novo mês</button></td></tr>`; }).join('')}
+    </tbody></table></div>`;
+  mostrar('portal');
+}
 async function abrirFechamento(id, atual) {
   if (atual) {   // já é o da sessão: só recarrega na tela (a aba pode estar mostrando outra empresa)
     EST = await api('/api/estado'); carregarManuais();
@@ -1605,7 +1635,7 @@ async function entrarADM() {
     desenharSCP();
   } catch (e) { alert(e.message); }
 }
-async function sairADM() { try { await api('/api/adm/sair', {method: 'POST'}); } catch (e) {} ADM = null; try { sessionStorage.removeItem('adm_token'); } catch (e) {} desenharSCP(); }
+async function sairADM() { if (PERFIL.adm) return; try { await api('/api/adm/sair', {method: 'POST'}); } catch (e) {} ADM = null; try { sessionStorage.removeItem('adm_token'); } catch (e) {} desenharSCP(); }
 async function conferirADM() { if (!ADM) return; try { const st = await api('/api/adm'); if (!st.ativo) { ADM = null; try { sessionStorage.removeItem('adm_token'); } catch (e) {} } } catch (e) {} }
 function setSCP(o, agora) {
   if (!ADM) { if (confirm('Só o ADM altera a Estratégia SCP. Entrar no modo ADM agora?')) entrarADM(); else desenharSCP(); return; }
@@ -2050,12 +2080,15 @@ async function excluirManual(i) { if (!confirm('Excluir a nota ' + (MAN[i].numer
     const pe = document.querySelector('.side-pe');
     if (pe) pe.insertAdjacentHTML('beforeend', `<button onclick="location.href='/sair'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg><span>Sair${PERFIL.usuario ? ' (' + esc(PERFIL.usuario) + ')' : ''}</span></button>`);
   }
+  if (PERFIL.adm) ADM = 'login';   // o login do ADM já libera a Estratégia, sem PIN
+  if (PERFIL.portal) { document.querySelectorAll('#abaPortal,.grp-portal').forEach(x => x.classList.remove('oculto')); try { PORTAL = await api('/api/portal'); } catch (e) {} }
   EST = await api('/api/estado'); PL = await api('/api/planilha'); carregarManuais();
   if (EST.config?.cnpj) $('#inCnpj').value = EST.config.cnpj;
   if (EST.config?.competencia) { const [a, m] = EST.config.competencia.split('-'); $('#inComp').value = m + '/' + a; }
   desenharCards();
   COR = await api('/api/corrigidos');
   if (EST.tem_resultado) { RES = await api('/api/resultado'); setTimeout(desenharSituacao, 300); if (RES.notas) { abrirResultado(); mostrar('docs'); } }
+  if (PERFIL.portal) abrirPortal();
 })();
 </script>
 </body>

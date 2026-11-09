@@ -13,3 +13,4 @@ __pycache__/
 .DS_Store
 config/acesso-*.txt
 exemplo/validar_planilha_junho.py
+config/portal.json

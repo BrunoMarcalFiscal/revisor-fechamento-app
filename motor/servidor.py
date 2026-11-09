@@ -28,8 +28,11 @@ PERFIL = (os.environ.get('REVISOR_PERFIL') or 'completo').strip().lower()
 EMPRESA_OK = re.sub(r'\D', '', os.environ.get('REVISOR_EMPRESA') or '')
 USUARIO = os.environ.get('REVISOR_USUARIO') or ''
 SENHA = os.environ.get('REVISOR_SENHA') or ''
-LOGIN_ON = bool(USUARIO and SENHA)
-SESSOES = {}
+# REVISOR_ADM_USUARIO / REVISOR_ADM_SENHA: login do ADM (abre o Painel e edita a Estratégia sem PIN)
+ADM_USUARIO = os.environ.get('REVISOR_ADM_USUARIO') or ''
+ADM_SENHA = os.environ.get('REVISOR_ADM_SENHA') or ''
+LOGIN_ON = bool(USUARIO and SENHA) or bool(ADM_USUARIO and ADM_SENHA)
+SESSOES = {}   # token -> {'usuario', 'adm'}
 BLOQ_COLAB = ('/api/scp', '/api/estrategico', '/api/adm')
 
 
@@ -47,6 +50,43 @@ def _cookie_tok(handler):
 
 def logado(handler):
     return not LOGIN_ON or _cookie_tok(handler) in SESSOES
+
+
+def sessao_adm(handler):
+    return bool((SESSOES.get(_cookie_tok(handler)) or {}).get('adm'))
+
+
+# ------------------------------------------------------------------ portal do Lucro Real
+# Empresas do Painel: REVISOR_PORTAL ("cnpj:Nome:scp;cnpj:Nome") ou config/portal.json ([{cnpj, nome, scp}]).
+# Fica fora do código (CNPJ de cliente não vai para o repositório público).
+def portal_empresas():
+    txt = os.environ.get('REVISOR_PORTAL') or ''
+    if txt.strip():
+        out = []
+        for parte in re.split(r'[;\n]', txt):
+            c = [x.strip() for x in parte.split(':')]
+            if c and re.sub(r'\D', '', c[0]):
+                out.append({'cnpj': re.sub(r'\D', '', c[0]), 'nome': c[1] if len(c) > 1 else '', 'scp': len(c) > 2 and c[2].lower() == 'scp'})
+        return out
+    return [dict(e, cnpj=re.sub(r'\D', '', e.get('cnpj') or '')) for e in _json(os.path.join(DADOS, 'config', 'portal.json'), [])]
+
+
+def scp_liberada(cnpj):
+    """Com o portal configurado, a Estratégia SCP só vale para as empresas marcadas com scp."""
+    emp = portal_empresas()
+    if not emp:
+        return True
+    raiz = re.sub(r'\D', '', cnpj or '')[:8]
+    return any(e.get('scp') and e['cnpj'][:8] == raiz for e in emp)
+
+
+def portal():
+    fechs = listar_fechamentos()
+    out = []
+    for e in portal_empresas():
+        meses = sorted([m for m in fechs if (m.get('cnpj') or '')[:8] == e['cnpj'][:8]], key=lambda m: m.get('competencia') or '', reverse=True)
+        out.append(dict(e, fechamentos=meses))
+    return out
 
 
 def empresa_permitida(cnpj):
@@ -73,7 +113,7 @@ def _hash_pin(pin, sal):
 
 
 def adm_ok(handler):
-    return handler.headers.get('X-ADM', '') in ADM_TOKENS
+    return sessao_adm(handler) or handler.headers.get('X-ADM', '') in ADM_TOKENS
 
 
 def _id_fech(res):
@@ -387,8 +427,11 @@ class H(BaseHTTPRequestHandler):
                 return self._env(200, LOGIN_HTML.replace('__ERRO__', ''), 'text/html; charset=utf-8') or True
             f = dict(urllib.parse.parse_qsl(self._corpo().decode('utf-8', 'ignore')))
             import secrets, hmac
-            if hmac.compare_digest(f.get('usuario', ''), USUARIO) and hmac.compare_digest(f.get('senha', ''), SENHA):
-                tok = secrets.token_urlsafe(32); SESSOES[tok] = f.get('usuario')
+            u_, s_ = f.get('usuario', ''), f.get('senha', '')
+            eh_adm = bool(ADM_USUARIO and ADM_SENHA) and hmac.compare_digest(u_, ADM_USUARIO) and hmac.compare_digest(s_, ADM_SENHA)
+            eh_eq = bool(USUARIO and SENHA) and hmac.compare_digest(u_, USUARIO) and hmac.compare_digest(s_, SENHA)
+            if eh_adm or eh_eq:
+                tok = secrets.token_urlsafe(32); SESSOES[tok] = {'usuario': u_, 'adm': eh_adm}
                 self.send_response(303); self.send_header('Location', '/')
                 self.send_header('Set-Cookie', 'rf_sessao=%s; Path=/; HttpOnly; SameSite=Lax%s; Max-Age=43200' % (tok, '; Secure' if os.environ.get('RENDER') else ''))
                 self.send_header('Content-Length', '0'); self.end_headers()
@@ -455,6 +498,10 @@ class H(BaseHTTPRequestHandler):
         if colaborador():
             if u.path.startswith(BLOQ_COLAB) or (u.path == '/api/relatorio' and q.get('tipo') in ('scp', 'estrategico')):
                 return self._env(403, {'erro': 'Este acesso não inclui a Estratégia.'}) or True
+        if u.path.startswith('/api/scp') or (u.path == '/api/relatorio' and q.get('tipo') == 'scp'):
+            r_ = _json(os.path.join(SAIDA, 'resultado.json'), {})
+            if r_ and not scp_liberada((r_.get('empresa') or {}).get('cnpj')):
+                return self._env(403, {'erro': 'Esta empresa não tem Estratégia SCP.'}) or True
         return False
 
     def do_GET(self):
@@ -464,7 +511,15 @@ class H(BaseHTTPRequestHandler):
         q = dict(urllib.parse.parse_qsl(u.query))
         try:
             if u.path == '/api/perfil':
-                return self._env(200, {'perfil': PERFIL, 'usuario': SESSOES.get(_cookie_tok(self), ''), 'login': LOGIN_ON, 'empresa': EMPRESA_OK})
+                se = SESSOES.get(_cookie_tok(self)) or {}
+                return self._env(200, {'perfil': PERFIL, 'usuario': se.get('usuario', ''), 'adm': bool(se.get('adm')) or (not LOGIN_ON and not colaborador()),
+                                       'login': LOGIN_ON, 'empresa': EMPRESA_OK, 'portal': bool(portal_empresas()) and not colaborador(),
+                                       'adm_login': bool(ADM_USUARIO and ADM_SENHA)})
+            if u.path == '/api/portal':
+                if colaborador():
+                    return self._env(403, {'erro': 'Sem acesso ao painel.'})
+                atual = _json(os.path.join(SESSAO, 'meta.json'), {})
+                return self._env(200, {'empresas': portal(), 'atual': atual, 'scp': scp_liberada(atual.get('cnpj')) if atual.get('cnpj') else False})
             if u.path in ('/', '/index.html'):
                 return self._env(200, open(os.path.join(WEB, 'index.html'), 'rb').read(), 'text/html; charset=utf-8')
             if u.path.startswith('/web/'):
@@ -604,6 +659,8 @@ class H(BaseHTTPRequestHandler):
                     ADM_TOKENS.discard(self.headers.get('X-ADM', ''))
                     return self._env(200, {'ok': True})
                 if u.path.endswith('criar'):
+                    if ADM_USUARIO and ADM_SENHA:
+                        return self._env(403, {'erro': 'Aqui o ADM entra pelo login dele, não por PIN.'})
                     if os.path.exists(ADM_ARQ):
                         return self._env(403, {'erro': 'O PIN do ADM já foi criado.'})
                     if len(pin) < 4:
