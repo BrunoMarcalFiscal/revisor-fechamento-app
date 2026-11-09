@@ -395,7 +395,7 @@ class H(BaseHTTPRequestHandler):
                 return True
             return self._env(401, LOGIN_HTML.replace('__ERRO__', '<div class="erro">Usuário ou senha incorretos.</div>'), 'text/html; charset=utf-8') or True
         if u.path == '/api/importar-fechamento' and metodo == 'POST':
-            # carga inicial do servidor: zip de um fechamento (pasta fechamentos/<id>), protegida por token próprio
+            # carga inicial do servidor: zip de um fechamento (pasta fechamentos/<id>), protegida por token próprio; a Estratégia SCP só entra no Revisor completo
             import hmac
             tok = os.environ.get('REVISOR_IMPORT_TOKEN') or ''
             if not tok or not hmac.compare_digest(self.headers.get('X-Import-Token', ''), tok):
@@ -415,7 +415,7 @@ class H(BaseHTTPRequestHandler):
             with zipfile.ZipFile(io.BytesIO(self._corpo())) as z:
                 for m in z.infolist():
                     alvo = os.path.abspath(os.path.join(dest, m.filename))
-                    if not alvo.startswith(os.path.abspath(dest) + os.sep) or os.path.basename(alvo) == 'scp.json':
+                    if not alvo.startswith(os.path.abspath(dest) + os.sep) or (colaborador() and os.path.basename(alvo) == 'scp.json'):
                         continue
                     if m.filename == 'remover_marcas.json':  # marcações que o escritório zerou: saem, as da cliente ficam
                         for k in json.loads(z.read(m).decode('utf-8')):
