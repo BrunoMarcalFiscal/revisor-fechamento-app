@@ -32,6 +32,33 @@ def _r(v):
     return round(v or 0, 2)
 
 
+def apuracao_padrao(ap, c=None):
+    """Apuração de ICMS/IPI quando a aba Apuração ainda não foi aberta: mesma conta de calcApu (web/index.html) com o padrão de apuPadrao
+    (crédito do Simples e DIFAL incluídos, saldo do mês anterior). Sem isso a Economia levaria ICMS e IPI zerados."""
+    t = (ap or {}).get('totais') or {}
+    if not t.get('saida') and not t.get('entrada'):
+        return {}
+    sa = ap.get('saldo_anterior') or {}
+    ai = ap.get('aliq_interna') or 0
+    def difal(d):
+        v, ae = d.get('valor') or 0, d.get('aliq_inter') or 0
+        icms = d['icms_origem'] if (d.get('icms_origem') or 0) > 0 else _r(v * ae / 100)
+        base = (v - icms) / (1 - ai / 100)
+        return _r(max(base * ai / 100 - icms, 0))
+    sim = _r(sum(x.get('credito') or 0 for x in ap.get('simples') or [] if not (x.get('ja_no_livro') or x.get('sem_direito'))))  # como carregarApu: começam fora do ajuste
+    dif = _r(sum(difal(d) for d in ap.get('difal') or []))
+    sant = (c or {}).get('icms_saldo_manual')
+    sant = sa.get('icms') or 0 if sant is None else sant
+    deb, cred = t.get('saida', {}).get('icms', 0), t.get('entrada', {}).get('icms', 0)
+    aj = []
+    if sim:
+        aj.append({'tipo': 'Outros créditos: crédito do Simples Nacional', 'valor': sim})
+    if dif:
+        aj.append({'tipo': 'Outros débitos: DIFAL uso e consumo', 'valor': dif})
+    return {'padrao': True, 'sim': sim, 'dif': dif, 'sant': sant, 'saldo': _r(deb + dif - cred - sim - sant), 'ajustes': aj,
+            'ipiSaldo': _r(t.get('saida', {}).get('ipi', 0) - t.get('entrada', {}).get('ipi', 0) - (sa.get('ipi') or 0))}
+
+
 def montar(res, k, apu=None):
     c, d, mp, mc, sp = k['cfg'], k['resumo']['distribuicao'], k['matriz']['pis'], k['matriz']['cofins'], k['scp']['pc']
     comp = res.get('competencia') or ''
@@ -149,7 +176,7 @@ def montar(res, k, apu=None):
     csll_m_tri = _r(ret_m.get('csll', 0) + sum((x.get('csll_m') or 0) for x in outros))
     t = 'IRPJ E CSLL - %d° TRIMESTRE %s' % (tri, ano)
     a.c('A2', t, st='tit'); a.m('A2:H2')
-    a.c('A3', 'APURAÇÃO LUCRO PRESUMIDO - %s' % scp_nome.upper(), st='sub'); a.m('A3:D3')
+    a.c('A3', 'APURAÇÃO LUCRO PRESUMIDO - %s' % scp_nome.upper(), st='sub'); a.m('A3:C3')
     a.c('F3', 'APURAÇÃO LUCRO REAL - %s' % curto.upper(), st='sub'); a.m('F3:H3')
     rot_tri = '%d° TRIMESTRE' % tri
     for col, rot in (('A', ''), ('B', nome_mes.upper()), ('C', rot_tri), ('F', ''), ('G', nome_mes.upper()), ('H', rot_tri)):
@@ -200,6 +227,9 @@ def montar(res, k, apu=None):
     # regime anterior
     a.c('A2', 'REGIME ANTERIOR - LUCRO PRESUMIDO', st='tit'); a.m('A2:B2')
     a.c('A3', 'FATURAMENTO', b=True); a.c('B3', ant['faturamento'] or 0, fmt='brl', b=True, ed='ant_faturamento')
+    # os quatro quadros com a mesma grade: 3 faturamento, 4 cabeçalho, 5-12 impostos, 13 espaço, 14-15 totais
+    for col, vcol in (('A', 'B'), ('D', 'E'), ('G', 'H')):
+        a.c('%s4' % col, 'IMPOSTO', st='cab'); a.c('%s4' % vcol, 'VALOR', st='cab')
     for i, (rot, kk) in enumerate(linhas_imp):
         a.c('A%d' % (5 + i), rot)
         a.c('B%d' % (5 + i), 0 if kk == 'adic' else (ant[kk] or 0), fmt='brl', ed=None if kk == 'adic' else 'ant_' + kk)
@@ -219,7 +249,7 @@ def montar(res, k, apu=None):
         a.c('D%d' % (5 + i), rot); a.c('E%d' % (5 + i), vs_s[kk][0], vs_s[kk][1], fmt='brl')
     carga_s = _r(pis_s + cof_s + irpj_s + adic_s + csll_s)
     # Matriz (Lucro Real)
-    apc = (apu or {}).get('calc') or {}
+    apc = (apu or {}).get('calc') or apuracao_padrao(res.get('apuracao'), c)
     icms_rec = _r(max(apc.get('saldo', 0) or 0, 0)) if apc else _r(max((k.get('icms_saldo') or 0), 0))
     ipi_rec = _r(max(apc.get('ipiSaldo', 0) or 0, 0)) if apc else 0
     iss_m = k.get('iss', 0)
@@ -248,18 +278,19 @@ def montar(res, k, apu=None):
     ret_tom = c['ret_tomados_manual'] if c.get('ret_tomados_manual') is not None else k.get('ret_a_recolher', 0)
     comp_flags = c.get('compensa') or {'pis': True, 'cofins': True, 'icms': True, 'retencao': True}
     a.c('J2', 'IMPOSTO POR EMPRESA', st='tit'); a.m('J2:L2')
-    a.c('J3', 'IMPOSTO', st='cab'); a.c('K3', 'MATRIZ', st='cab'); a.c('L3', 'SCP', st='cab')
+    a.c('J3', 'FATURAMENTO', b=True); a.c('K3', q3, '=H3', fmt='brl', b=True); a.c('L3', m3, '=E3', fmt='brl', b=True)
+    a.c('J4', 'IMPOSTO', st='cab'); a.c('K4', 'MATRIZ', st='cab'); a.c('L4', 'SCP', st='cab')
     tab = [(rot, kk, vs_m[kk][0], '=H%d' % (5 + i), vs_s[kk][0], '=E%d' % (5 + i)) for i, (rot, kk) in enumerate(linhas_imp)] + [('RETENÇÃO', 'retencao', ret_tom, None, 0, None)]
     pag_m = 0.0
     refs_pag = []
     for i, (rot, kk, vm, fm, vs_, fs) in enumerate(tab):
-        r = 5 + i
+        r = 5 + i if kk != 'retencao' else 14  # retenção fora da lista de impostos, alinhada com a 1ª linha de total
         cf = comp_flags.get('irpj' if kk == 'adic' else kk)
         a.c('J%d' % r, rot + (' (compensa)' if cf else '')); a.c('K%d' % r, vm, fm, fmt='brl', ed='ret_tomados_manual' if kk == 'retencao' else None); a.c('L%d' % r, vs_, fs, fmt='brl')
         if not cf:
             pag_m += vm; refs_pag.append('K%d' % r)
-    a.c('J14', 'PAGAMENTO DE FATO', st='pag'); a.c('K14', _r(pag_m), ('=' + '+'.join(refs_pag)) if refs_pag else None, st='pag', fmt='brl')
-    a.c('L14', _r(pis_s + cof_s + irpj_s + adic_s + csll_s), '=SUM(L5:L12)', st='pag', fmt='brl')
+    a.c('J15', 'PAGAMENTO DE FATO', st='pag'); a.c('K15', _r(pag_m), ('=' + '+'.join(refs_pag)) if refs_pag else None, st='pag', fmt='brl')
+    a.c('L15', _r(pis_s + cof_s + irpj_s + adic_s + csll_s), '=SUM(L5:L12)', st='pag', fmt='brl')
     # fechamento
     carga_comp = _r(fat * pct_ant)
     carga_est = _r(carga_s + carga_m)
@@ -376,7 +407,7 @@ def montar(res, k, apu=None):
         tot_rows[grp] = r
         r += 2
     estado = (apu or {}).get('estado') or {}
-    saldo_ant = c['icms_saldo_manual'] if c.get('icms_saldo_manual') is not None else _num(estado.get('saldo_icms'))
+    saldo_ant = c['icms_saldo_manual'] if c.get('icms_saldo_manual') is not None else (_num(estado.get('saldo_icms')) if estado else (apc.get('sant') or 0))
     te, ts = tot_rows['entrada'], tot_rows['saida']
     cred_tot = (ap.get('totais') or {}).get('entrada', {}).get('icms', 0)
     deb_tot = (ap.get('totais') or {}).get('saida', {}).get('icms', 0)
@@ -465,7 +496,7 @@ def detalhes(res, k):
                   'obs': 'Devolução de venda reduz a base de débito (Lei 10.833/03, art. 1º, §3º, V, b).',
                   'linhas': [cf_lin(x) for x in deb if x['sinal'] < 0] + [cf_lin(x, False) for x in fora_deb if x['sinal'] < 0]}
     d['prod_fat'] = {'titulo': 'Faturamento de produtos (valor contábil das vendas)', 'tipo': 'cfop', 'toggle': 'debito_cfop',
-                     'obs': 'Soma do valor contábil dos CFOP de venda considerados.', 'linhas': d['prod_saida']['linhas']}
+                     'obs': 'Soma do valor contábil dos CFOP de venda considerados. Exportação não entra.', 'linhas': d['prod_saida']['linhas']}
     d['cred_prod'] = {'titulo': 'Entradas de produtos: CFOP que geram crédito', 'tipo': 'cfop', 'toggle': 'creditos_cfop',
                       'obs': 'Base = valor contábil − ICMS%s. Uso e consumo, ativo e remessas ficam fora por padrão; marque para incluir.' % (' − IPI' if c.get('excluir_ipi_credito') else ''),
                       'linhas': [cf_lin(x) for x in k['linhas_credito']] + [cf_lin(x, False) for x in k.get('linhas_fora') or []]}
@@ -758,29 +789,149 @@ def html_aba(a, pdf=False):
     return ''.join(out)
 
 
-def pdf(abas, cab):
+def _pdf_cabecalho(doc, cab, aba=None):
     import fitz, os
-    buf = io.BytesIO()
-    w = fitz.DocumentWriter(buf)
-    mb = fitz.paper_rect('a4-l')
-    area = mb + (24, 64, -24, -28)
-    titulos = []
-    for a in abas:
-        story = fitz.Story('<body style="font-family:sans-serif"><p style="font-size:9pt;font-weight:bold;color:#0E2841;margin:0 0 6px 0">Aba %s</p>%s</body>' % (a.nome, html_aba(a, True)))
-        mais = 1
-        while mais:
-            dev = w.begin_page(mb); mais, _ = story.place(area); story.draw(dev); w.end_page(); titulos.append(a.nome)
-    w.close()
-    doc = fitz.open('pdf', buf.getvalue())
     logo = os.path.join(os.path.dirname(__file__), '..', 'web', 'logo-colorida.png')
     n = len(doc)
     for i, pg in enumerate(doc, start=1):
         r = pg.rect
         if os.path.exists(logo):
             pg.insert_image(fitz.Rect(24, 16, 120, 44), filename=logo, keep_proportion=True)
-        pg.insert_text((r.width - 360, 28), cab['titulo'], fontsize=10, color=(0.05, 0.16, 0.25), fontname='hebo')
-        pg.insert_text((r.width - 360, 41), '%s · CNPJ %s · Competência %s' % (cab['empresa'][:46], cab['cnpj'], cab['competencia']), fontsize=7.5, color=(0.36, 0.39, 0.47))
+        t1 = cab['titulo'] + (' · %s' % aba if aba else '')
+        t2 = '%s · CNPJ %s · Competência %s' % (cab['empresa'][:46], cab['cnpj'], cab['competencia'])
+        pg.insert_text((r.width - 24 - fitz.Font('hebo').text_length(t1, fontsize=10), 30), t1, fontsize=10, color=(0.05, 0.16, 0.25), fontname='hebo')
+        pg.insert_text((r.width - 24 - fitz.Font('helv').text_length(t2, fontsize=7.5), 43), t2, fontsize=7.5, color=(0.36, 0.39, 0.47))
         pg.draw_line((24, 54), (r.width - 24, 54), color=(0.84, 0.85, 0.89), width=0.6)
         pg.insert_text((24, r.height - 14), 'Marçal Contabilidade · Revisor do Fechamento', fontsize=7, color=(0.54, 0.58, 0.65))
-        pg.insert_text((r.width - 90, r.height - 14), 'Página %d de %d' % (i, n), fontsize=7, color=(0.54, 0.58, 0.65))
+        if n > 1:
+            t3 = 'Página %d de %d' % (i, n)
+            pg.insert_text((r.width - 24 - fitz.Font('helv').text_length(t3, fontsize=7), r.height - 14), t3, fontsize=7, color=(0.54, 0.58, 0.65))
+
+
+def _hex(h):
+    return tuple(int(h[k:k + 2], 16) / 255 for k in (0, 2, 4))
+
+
+def pdf_aba(a, cab):
+    """Uma aba numa página só (A4 paisagem), desenhada como grade: colunas na largura do conteúdo,
+    mesclas inteiras, texto centralizado na altura e tudo alinhado à margem do cabeçalho."""
+    import fitz
+    from openpyxl.utils import coordinate_to_tuple, get_column_letter
+    FS, PAD, U, ALT, VAZIA = 7.5, 4.0, 4.6, 15.0, 7.0
+    BORDA, NOTA, COD = _hex('7F7F7F'), _hex('5B6478'), _hex('E00000')
+    txt = lambda cc: str(_fmt(cc)).replace('\u2212', '-')
+    fonte = lambda cc: 'heit' if cc['st'] == 'nota' else ('hebo' if cc.get('b') or cc['st'] in COR or cc['st'] == 'cod' else 'helv')
+    tam = lambda cc: 6.5 if cc['st'] in ('nota', 'cod') else FS
+    FT = {n: fitz.Font(n) for n in ('helv', 'hebo', 'heit')}  # fitz.get_text_length mede acento errado (É)
+    mede = lambda t, fn, fs: FT[fn].text_length(t, fontsize=fs)
+    larg_txt = lambda cc: mede(txt(cc), fonte(cc), tam(cc)) + 2 * PAD
+
+    pos = {coordinate_to_tuple(r): v for r, v in a.cel.items()}
+    if not pos:
+        return pdf_vazio(cab, a.nome)
+    maxr = max(r for r, _ in pos); c0 = min(c for _, c in pos); maxc = max(c for _, c in pos)
+    cols = list(range(c0, maxc + 1))
+    span, oculto = {}, set()
+    for rng in a.mesc:
+        i1, f1 = rng.split(':')
+        (r1, k1), (r2, k2) = coordinate_to_tuple(i1), coordinate_to_tuple(f1)
+        span[(r1, k1)] = (r2, k2)
+        oculto |= {(rr, kk) for rr in range(r1, r2 + 1) for kk in range(k1, k2 + 1)} - {(r1, k1)}
+    # texto solto com a célula da direita vazia transborda (como no Excel) em vez de alargar a coluna
+    transborda = lambda r, c, cc: cc['st'] == 'lin' and isinstance(cc['v'], str) and (r, c + 1) not in pos and c < maxc
+    # largura: a da planilha, alargada até caber o maior texto da coluna (nota não alarga: ela quebra linha)
+    W = {c: a.larg.get(get_column_letter(c), 10) * U for c in cols}
+    for (r, c), cc in pos.items():
+        if cc['st'] != 'nota' and (r, c) not in span and (r, c) not in oculto and not transborda(r, c, cc):
+            W[c] = max(W[c], larg_txt(cc))
+    for (r, c), (r2, c2) in span.items():
+        cc = pos.get((r, c))
+        falta = (larg_txt(cc) if cc else 0) - sum(W[k] for k in range(c, c2 + 1))
+        if falta > 0:
+            W[c2] += falta
+    X, x = {}, 0.0
+    for c in cols:
+        X[c] = x; x += W[c]
+    largura = x
+    vazia = lambda r: all(pos.get((r, c)) is None for c in cols)
+    Y, y = {}, 0.0
+    for r in range(1, maxr + 1):
+        Y[r] = y; y += VAZIA if vazia(r) else ALT
+    Y[maxr + 1] = y
+    altura = y - Y[min(r for r, _ in pos)]
+    topo = Y[min(r for r, _ in pos)]
+
+    mb = fitz.paper_rect('a4-l')
+    area = mb + (24, 66, -24, -30)
+    e = min(area.width / largura, area.height / altura, 1.25)
+    doc = fitz.open()
+    pg = doc.new_page(width=mb.width, height=mb.height)
+    px = lambda v: area.x0 + v * e
+    py = lambda v: area.y0 + (v - topo) * e
+    for (r, c), cc in sorted(pos.items()):
+        if (r, c) in oculto:
+            continue
+        r2, c2 = span.get((r, c), (r, c))
+        st = cc['st']
+        if st == 'nota':
+            t = txt(cc)
+            if not t.strip():
+                continue
+            fs = tam(cc) * e
+            caixa = fitz.Rect(px(X[c] + PAD), py(Y[r]) + 2 * e, px(largura), py(Y[r]) + 3 * ALT * e)
+            if mede(t, 'heit', fs) <= caixa.width:
+                pg.insert_text((caixa.x0, py(Y[r]) + (ALT * e + fs * 0.7) / 2), t, fontname='heit', fontsize=fs, color=NOTA)
+            else:
+                pg.insert_textbox(caixa, t, fontname='heit', fontsize=fs, color=NOTA)
+            continue
+        if transborda(r, c, cc):
+            while c2 < maxc and (r, c2 + 1) not in pos and (X[c2] + W[c2] - X[c]) < larg_txt(cc):
+                c2 += 1
+        rc = fitz.Rect(px(X[c]), py(Y[r]), px(X[c2] + W[c2]), py(Y[r2 + 1]))
+        if st != 'cod':
+            bg = _hex(COR[st][0]) if st in COR else None
+            pg.draw_rect(rc, color=BORDA, fill=bg, width=0.5 * e)
+        t = txt(cc)
+        if not t:
+            continue
+        fn, fs = fonte(cc), tam(cc) * e
+        while fs > 3 and mede(t, fn, fs) > rc.width - 2 * PAD * e:
+            fs -= 0.25
+        lt = mede(t, fn, fs)
+        num = not isinstance(cc['v'], str) and cc['v'] is not None and cc['fmt'] != 'txt'
+        if st in ('tit', 'sub', 'cab') or st == 'cod':
+            tx = rc.x0 + (rc.width - lt) / 2
+        elif num:
+            tx = rc.x1 - PAD * e - lt
+        else:
+            tx = rc.x0 + PAD * e
+        cor = COD if st == 'cod' else (_hex(COR[st][1]) if st in COR else (0, 0, 0))
+        pg.insert_text((tx, rc.y0 + (rc.height + fs * 0.7) / 2), t, fontname=fn, fontsize=fs, color=cor)
+    _pdf_cabecalho(doc, cab, a.nome)
     return doc.tobytes(deflate=True, garbage=3)
+
+
+def pdf_vazio(cab, nome):
+    import fitz
+    doc = fitz.open(); mb = fitz.paper_rect('a4-l'); doc.new_page(width=mb.width, height=mb.height)
+    _pdf_cabecalho(doc, cab, nome)
+    return doc.tobytes()
+
+
+def pdf(abas, cab):
+    """Todas as abas num PDF só, uma página por aba."""
+    import fitz
+    doc = fitz.open()
+    for a in abas:
+        doc.insert_pdf(fitz.open('pdf', pdf_aba(a, cab)))
+    return doc.tobytes(deflate=True, garbage=3)
+
+
+def pdf_zip(abas, cab):
+    """Um PDF por aba (uma página cada), num .zip."""
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        for i, a in enumerate(abas, start=1):
+            z.writestr('%d - %s.pdf' % (i, a.nome), pdf_aba(a, cab))
+    return buf.getvalue()

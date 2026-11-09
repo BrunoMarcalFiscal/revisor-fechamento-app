@@ -91,7 +91,10 @@ def extrair(res):
                 com += 1; icms_dentro += f['icms']
             else:
                 sem += 1
-    return {'icms_pis_saidas': {'com_icms': com, 'sem_icms': sem, 'icms_dentro': round(icms_dentro, 2)},
+    exp = [n.get('fiscal') or {} for n in notas if n['tipo'] == 'NF-e' and n['mov'] == 'saida' and any(str(c).startswith('7') for c in (n.get('fiscal') or {}).get('cfops', []))]
+    exp = [f for f in exp if (f.get('pis') or 0) + (f.get('cofins') or 0) > 0]
+    return {'export_pis': {'notas': len(exp), 'valor': round(sum((f.get('pis') or 0) + (f.get('cofins') or 0) for f in exp), 2)},
+            'icms_pis_saidas': {'com_icms': com, 'sem_icms': sem, 'icms_dentro': round(icms_dentro, 2)},
             'empresa': res.get('empresa', {}), 'competencia': res.get('competencia'), 'cfops': linhas, 'prestados': prest, 'tomados': toma,
             'locacoes': loc, 'importacao_xml': {'pis': _r(imp_pis), 'cofins': _r(imp_cof), 'vc': _r(imp_vc)},
             'credita_ipi': (ap.get('totais') or {}).get('entrada', {}).get('ipi', 0) > 0, 'emp_raiz': emp_raiz}
@@ -120,13 +123,20 @@ def calcular(dados, cfg):
         return _r(val)
 
     # ---- 1. produtos: débito (saídas) e créditos (entradas), linha a linha de CFOP
-    deb_lin, cred_lin, fora_lin, deb_fora = [], [], [], []
+    deb_lin, cred_lin, fora_lin, deb_fora, exp_lin = [], [], [], [], []
     deb_ov = c.get('debito_cfop') or {}   # ADM: CFOP de saída/devolução que entra (True) ou sai (False) da base de débito
     for l in dados['cfops']:
         cf, suf = l['cfop'], l['cfop'][1:]
         ent = cf[0] in '123'
         nfs = l.get('notas') or []
         ov = deb_ov.get(cf)
+        # exportação (7xxx): fora do débito de PIS/COFINS (Lei 10.637/02, art. 5º, I; Lei 10.833/03, art. 6º, I) e do faturamento da Economia; só conta no IRPJ/CSLL do comparativo
+        if not ent and cf[0] == '7' and not ov and suf not in DEV_COMPRA:
+            exc = (l['ipi'] if c['excluir_ipi_debito'] else 0) + (l['st'] if c['excluir_st_debito'] else 0)
+            if suf in VENDA or c['saida_cfop_extra'].get(cf):
+                exp_lin.append({'cfop': cf, 'desc': l['desc'], 'vc': l['vc'], 'icms': l['icms'], 'ipi': l['ipi'], 'st': l['st'], 'base': _r(l['vc'] - l['icms'] - exc), 'sinal': 1, 'notas': nfs})
+            deb_fora.append({'cfop': cf, 'desc': l['desc'] + ' (exportação, fora do PIS/COFINS)', 'vc': l['vc'], 'icms': l['icms'], 'ipi': l['ipi'], 'st': l['st'], 'base': _r(l['vc'] - l['icms'] - exc), 'sinal': 1, 'notas': nfs, 'padrao': False})
+            continue
         if not ent and ov is False or (not ent and ov is None and not (suf in VENDA or c['saida_cfop_extra'].get(cf)) and not (suf in DEV_COMPRA and c['deduzir_devolucoes'])):
             deb_fora.append({'cfop': cf, 'desc': l['desc'], 'vc': l['vc'], 'icms': l['icms'], 'ipi': l['ipi'], 'st': l['st'], 'base': _r(l['vc'] - l['icms']), 'sinal': 1, 'notas': nfs, 'padrao': suf in VENDA})
             continue
@@ -155,6 +165,7 @@ def calcular(dados, cfg):
             cred_lin.append({'cfop': cf, 'desc': l['desc'] + ' (devolução de compra, reduz o crédito)', 'grupo': 'Devolução de compra', 'vc': l['vc'], 'icms': l['icms'],
                              'ipi': l['ipi'] if c['excluir_ipi_credito'] else 0, 'base': _r(-base), 'padrao': True, 'inclui': True, 'notas': nfs})
     base_prod = _r(sum(x['base'] for x in deb_lin))
+    base_exp = _r(sum(x['base'] for x in exp_lin))
     ed = []  # valores digitados pelo ADM (sobrepõem o calculado)
     if c.get('base_prod_manual') is not None or c.get('devol_manual') is not None:
         vend = c['base_prod_manual'] if c.get('base_prod_manual') is not None else sum(x['base'] for x in deb_lin if x['sinal'] > 0)
@@ -162,6 +173,8 @@ def calcular(dados, cfg):
         base_prod = _r(vend - dvl)
         ed.append('base de produtos')
     m('produtos', 'Saídas de produtos (vendas, sem 5922)', sum(x['vc'] for x in deb_lin if x['sinal'] > 0), 'soma do valor contábil dos CFOP de venda')
+    if exp_lin:
+        m('produtos', 'Exportações fora da base (não somam abaixo)', base_exp, 'CFOP %s: fora do PIS/COFINS e do faturamento' % ', '.join(x['cfop'] for x in exp_lin))
     m('produtos', '(−) ICMS destacado', sum(x['icms'] * x['sinal'] for x in deb_lin), 'exclusão do ICMS da base (STF, Tema 69)')
     if c['excluir_ipi_debito']:
         m('produtos', '(−) IPI destacado', sum(x['ipi'] * x['sinal'] for x in deb_lin), 'IPI não integra a receita bruta (DL 1.598/77, art. 12, §4º)')
@@ -366,13 +379,13 @@ def calcular(dados, cfg):
     tr = {'pis_cofins': nc_all(PIS_NC, cred_pis, c['saldo_pis_ant'], ret['pis']) + nc_all(COF_NC, cred_cof, c['saldo_cof_ant'], ret['cofins']),
           'irpj_csll': max(max(lucro_serv, 0) * 0.15 + max(lucro_serv - 20000, 0) * 0.10 - ret['irrf'], 0) + max(max(lucro_serv, 0) * 0.09 - ret['csll'], 0)}
     # tudo no Presumido
-    pres_p = base_prod * 0.08 + (serv_total + loc_total) * 0.32
-    pres_c = base_prod * 0.12 + (serv_total + loc_total) * 0.32
+    pres_p = (base_prod + base_exp) * 0.08 + (serv_total + loc_total) * 0.32
+    pres_c = (base_prod + base_exp) * 0.12 + (serv_total + loc_total) * 0.32
     tp = {'pis_cofins': max(base_all * (PIS_CU + COF_CU) / 100 - ret['pis'] - ret['cofins'], 0),
           'irpj_csll': max(pres_p * 0.15 + max(pres_p - 20000, 0) * 0.10 - ret['irrf'], 0) + max(pres_c * 0.09 - ret['csll'], 0)}
     for x in (est, tr, tp):
         x['total'] = _r(x['pis_cofins'] + x['irpj_csll']); x['pis_cofins'] = _r(x['pis_cofins']); x['irpj_csll'] = _r(x['irpj_csll'])
-    receita_total = base_prod + serv_total + loc_total
+    receita_total = base_prod + base_exp + serv_total + loc_total
     comparativo = {'estrategia': est, 'lucro_real': tr, 'presumido': tp, 'iss': _r(iss_total), 'receita': _r(receita_total),
                    'economia_vs_real': _r(tr['total'] - est['total']), 'economia_vs_presumido': _r(tp['total'] - est['total']),
                    'premissas': ['Mês isolado; ICMS, IPI e ISS são iguais nos três cenários e ficam fora da soma.',
@@ -382,6 +395,9 @@ def calcular(dados, cfg):
 
     # ---- 7. alertas e riscos
     ic = dados.get('icms_pis_saidas') or {}
+    ex = dados.get('export_pis') or {}
+    if ex.get('notas'):
+        alertas.append({'sev': 'alerta', 'tipo': 'premissa', 'txt': '%d NF-e de exportação saíram com PIS/COFINS destacado no XML (%s). Aqui ficam fora da base; confira o CST das notas e a EFD-Contribuições.' % (ex['notas'], _b(ex['valor']))})
     if ic.get('com_icms'):
         alertas.append({'sev': 'info', 'tipo': 'icms', 'txt': '%d NF-e de venda saíram com o ICMS dentro da base do PIS/COFINS no XML (%s de ICMS). A exclusão (Tema 69) é feita aqui na apuração; confira se foi ajustada na EFD-Contribuições.' % (ic['com_icms'], _b(ic['icms_dentro']))})
     if not c['scp_cnpj']:
@@ -418,7 +434,7 @@ def calcular(dados, cfg):
         alertas.append({'sev': 'info', 'tipo': 'adm', 'txt': 'Valores digitados pelo ADM substituem o calculado em: %s.' % ', '.join(sorted(set(ed)))})
     return {'cfg': c, 'editados': sorted(set(ed)), 'resumo': resumo, 'matriz': {'pis': mp, 'cofins': mc}, 'scp': {'pc': sp, 'irpj': _r(irpj + adic), 'csll': _r(csll), 'irpj_rec': _r(irpj_rec),
             'csll_rec': _r(csll_rec), 'base_tri': _r(base_tri_rec), 'pres_tri': _r(pres)}, 'memoria': dict(mem), 'comparativo': comparativo, 'alertas': alertas,
-            'linhas_debito': deb_lin, 'linhas_credito': cred_lin, 'linhas_fora': fora_lin, 'linhas_debito_fora': deb_fora, 'retencoes': {'total': {k: _r(v) for k, v in ret.items()},
+            'linhas_debito': deb_lin, 'linhas_credito': cred_lin, 'linhas_fora': fora_lin, 'linhas_debito_fora': deb_fora, 'linhas_exportacao': exp_lin, 'retencoes': {'total': {k: _r(v) for k, v in ret.items()},
             'matriz': {k: _r(v) for k, v in ret_m.items()}, 'scp': {k: _r(v) for k, v in ret_s.items()}}, 'iss': _r(iss_total),
             'prestados': dados['prestados'][:500], 'tomados': dados['tomados'][:500],
             'importacao': {'modo': 'manual' if (c['imp_pis_manual'] is not None or c['imp_cof_manual'] is not None) else ('pago' if (c['importacao'] == 'pago' and (imp.get('pis') or imp.get('cofins'))) else 'base'),

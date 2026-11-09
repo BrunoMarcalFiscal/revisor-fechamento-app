@@ -489,7 +489,14 @@ def gerar(res, apu, tipo, formato, **op):
         abas = scp_planilha.montar(res, res['scp_calc'], apu)
         if formato == 'xlsx':
             return scp_planilha.xlsx(abas)
-        return scp_planilha.pdf(abas, _cab(res, 'Estratégia tributária Matriz × SCP'))
+        cab = _cab(res, 'Estratégia tributária Matriz × SCP')
+        aba = op.get('aba')
+        if aba == 'todas':
+            return scp_planilha.pdf_zip(abas, cab)
+        sel = [x for x in abas if x.nome == aba]
+        if sel:
+            return scp_planilha.pdf_aba(sel[0], cab)
+        return scp_planilha.pdf(abas, cab)
     if tipo == 'scp':
         rel = estrategia_scp(res)
     elif tipo == 'estrategico':

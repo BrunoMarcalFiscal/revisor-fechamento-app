@@ -1706,10 +1706,15 @@ async function desenharSCP() {
   // 7. alertas
   const ord = {risco: 0, alerta: 1, info: 2};
   const al = `<div class="tit" style="margin-top:6px">7. Alertas e validações</div><div class="painel" style="margin-bottom:24px">${k.alertas.slice().sort((a, b) => ord[a.sev] - ord[b.sev]).map(a => `<div class="al-scp ${a.sev}"><span class="tag ${a.sev === 'risco' ? 'erro' : a.sev === 'alerta' ? 'alerta' : 'info'}">${a.sev === 'risco' ? 'Risco fiscal' : a.sev === 'alerta' ? 'Validar' : 'Informação'}</span> ${esc(a.txt)}</div>`).join('') || '<div class="vz-p">Nenhum alerta.</div>'}</div>`;
-  const bar = `<div class="rel-b" style="border:1px solid var(--borda);border-radius:8px;background:#fff;margin-bottom:12px"><span style="flex:1 1 260px;color:var(--suave);font-size:12.5px"><b>Estratégia Matriz (Lucro Real) × SCP (Lucro Presumido)</b> · ${esc(RES.empresa.nome || '')} · ${esc((RES.competencia || '').split('-').reverse().join('/'))}. Os parâmetros mudam a simulação, não os dados importados.</span>
-    ${ADM ? `<span class="tag ok" style="align-self:center">ADM: edição liberada</span><button class="btn peq" onclick="sairADM()">Sair do ADM</button>` : `<button class="btn peq" onclick="entrarADM()">Entrar como ADM</button>`}
-    <button class="btn peq" onclick="importarMeses()" title="Planilhas de fechamento dos meses anteriores do trimestre (Excel)">Importar meses anteriores</button>
-    <button class="btn peq" onclick="resetSCP()">Parâmetros padrão</button><button class="btn peq pri" onclick="baixarSCP('pdf')">PDF</button><button class="btn peq pri" onclick="baixarSCP('xlsx')">Excel</button></div>`;
+  const bar = `<div class="scp-bar"><div class="q"><b>Matriz (Lucro Real) × SCP (Lucro Presumido)</b><span>${esc((RES.competencia || '').split('-').reverse().join('/'))}</span>
+      ${ADM ? `<span class="tag ok">ADM: edição liberada</span>` : `<span class="tag info" title="Para editar os campos, entre como ADM">Somente leitura</span>`}</div>
+    <div class="ac">${['par', 'mem', 'res'].includes(SCP_ABA) ? '' : `<button class="btn peq" onclick="baixarSCP('pdf', SCP_ABA)" title="Só a aba aberta, numa página">PDF desta aba</button>`}<button class="btn peq pri" onclick="baixarSCP('xlsx')">Excel</button>
+      <details class="scp-mais"><summary class="btn peq">Mais</summary><div class="m">
+        ${ADM ? `<button onclick="sairADM()">Sair do ADM</button>` : `<button onclick="entrarADM()">Entrar como ADM</button>`}
+        <button onclick="baixarSCP('pdf', 'todas')" title="Um PDF por aba, cada um numa página (.zip)">PDF de cada aba</button>
+        <button onclick="importarMeses()" title="Planilhas de fechamento dos meses anteriores do trimestre (Excel)">Importar meses anteriores</button>
+        <button onclick="resetSCP()">Parâmetros padrão</button>
+      </div></details></div></div>`;
   const ant = `<div class="painel" style="margin-bottom:12px"><div class="ph">Regime anterior e compensações <small>alimentam a aba Economia</small></div>
     <div class="cfg-ref">${num('ant_faturamento', 'Faturamento (regime anterior)', '')}${num('ant_pis', 'PIS', '')}${num('ant_cofins', 'COFINS', '')}${num('ant_irpj', 'IRPJ', '')}${num('ant_csll', 'CSLL', '')}
       ${num('ant_ipi', 'IPI', '')}${num('ant_iss', 'ISS', '')}${num('ant_icms', 'ICMS', '')}
@@ -1717,21 +1722,73 @@ async function desenharSCP() {
     <div class="cfg-ref"><span style="font-size:11px;font-weight:700;color:var(--suave);text-transform:uppercase;letter-spacing:.4px">Matriz compensa (fora do pagamento de fato)</span>
       ${['pis', 'cofins', 'icms', 'ipi', 'iss', 'retencao'].map(kk => `<label class="tg"><input type="checkbox" ${(c.compensa || {})[kk] ? 'checked' : ''} onchange="setSCP({compensa: Object.assign({}, SCPR.cfg.compensa, {${kk}: this.checked})}, true)"> ${kk === 'retencao' ? 'Retenção' : kk.toUpperCase()}</label>`).join('')}</div>
     <div class="cfg-ref"><label>Nome curto da Matriz<input type="text" style="width:160px" value="${esc(c.matriz_nome || '')}" onchange="setSCP({matriz_nome: this.value}, true)"></label></div></div>`;
-  const abasX = [['Pis.Cofins', 'Pis.Cofins'], ['Irpj.Csll', 'Irpj.Csll'], ['Economia', 'Economia'], ['Fechamento Trimestral', 'Fechamento Trimestral'], ...(RES.tem_icms === false ? [] : [['Icms', 'Icms']]), ['par', 'Parâmetros e simulação'], ['mem', 'Memória e alertas']];
-  if (RES.tem_icms === false && SCP_ABA === 'Icms') SCP_ABA = 'Pis.Cofins';
+  const abasX = [['res', 'Resumo'], ['Pis.Cofins', 'Pis.Cofins'], ['Irpj.Csll', 'Irpj.Csll'], ['Economia', 'Economia'], ['Fechamento Trimestral', 'Fechamento Trimestral'], ...(RES.tem_icms === false ? [] : [['Icms', 'Icms']]), ['par', 'Parâmetros e simulação'], ['mem', 'Memória e alertas']];
+  if (RES.tem_icms === false && SCP_ABA === 'Icms') SCP_ABA = 'res';
   const aba = SCP_ABA;
   let corpo = '';
-  if (aba === 'par') corpo = `<div class="tit">Resumo da operação</div>` + resumo + `<div class="tit">Importação de relatórios</div>` + imp + sim + matriz.replace('3. Apuração da Matriz (Lucro Real)', 'Créditos, critérios e resultado da Matriz') + scpT.replace('4. Apuração da SCP (Lucro Presumido)', 'Trimestre da SCP') + ant;
+  if (aba === 'res') corpo = scpResumo(k);
+  else if (aba === 'par') corpo = `<div class="tit">Resumo da operação</div>` + resumo + `<div class="tit">Importação de relatórios</div>` + imp + sim + matriz.replace('3. Apuração da Matriz (Lucro Real)', 'Créditos, critérios e resultado da Matriz') + scpT.replace('4. Apuração da SCP (Lucro Presumido)', 'Trimestre da SCP') + ant;
   else if (aba === 'mem') corpo = `<div class="pn-g2">${memTab('produtos', 'Base de débito de produtos')}${memTab('creditos', 'Base de créditos')}</div><div class="pn-g2">${memTab('matriz_pis', 'Matriz: PIS')}${memTab('matriz_cofins', 'Matriz: COFINS')}</div>
     <div class="pn-g2">${memTab('scp_pc', 'SCP: PIS e COFINS')}${memTab('scp_ir', 'SCP: IRPJ e CSLL trimestral')}</div><div class="pn-g2">${memTab('matriz_ir', 'Matriz: IRPJ e CSLL')}<div></div></div>` + comp + al;
   else { const pl = (k.planilha || []).find(p => p.nome === aba); corpo = pl ? `<div class="xl-wrap">${htmlAba(pl)}</div><div class="apu-nota" style="border:0">${ADM ? 'Clique em qualquer valor para Detalhar (CFOP, notas, fórmula) ou Editar. Valor digitado fica marcado em laranja e as fórmulas recalculam; "Voltar ao calculado" desfaz.' : 'Clique em qualquer valor para ver a fórmula e Detalhar a composição (CFOP e notas). Para editar, entre como ADM.'} O Excel exportado traz as mesmas abas, células e fórmulas.</div>` : ''; }
   const y = window.scrollY;
-  if (!ADM) setTimeout(() => document.querySelectorAll('#secScp .xl-tabs ~ * input, #secScp .xl-tabs ~ * select, #secScp .xl-tabs ~ * .painel button').forEach(el => { el.disabled = true; el.title = 'Só o ADM edita'; }), 0);
-  $('#secScp').innerHTML = bar + (ADM ? '' : `<div class="aviso" style="background:var(--palido);border-color:#C9D8EE;color:var(--navy)">Modo leitura. Para editar os campos da Estratégia SCP, entre como ADM.</div>`) + `<div class="xl-tabs">${abasX.map(([id, rot]) => `<button class="${aba === id ? 'on' : ''}" onclick="SCP_ABA='${id}';desenharSCP()">${rot}</button>`).join('')}</div>` + corpo;
+  if (!ADM) setTimeout(() => document.querySelectorAll('#secScp .mod-c input, #secScp .mod-c select, #secScp .mod-c .painel button:not(.lnk)').forEach(el => { el.disabled = true; el.title = 'Só o ADM edita'; }), 0);
+  const it = ([id, rot]) => `<button class="${aba === id ? 'on' : ''}" onclick="SCP_ABA='${id}';desenharSCP()">${rot}</button>`;
+  const so = ids => abasX.filter(x => ids.includes(x[0])).map(it).join('');
+  $('#secScp').innerHTML = bar + `<div class="mod-l"><nav class="mod-nav"><div class="rl-t">Visão</div>${so(['res'])}<div class="rl-t">Planilhas</div>${so(['Pis.Cofins', 'Irpj.Csll', 'Economia', 'Fechamento Trimestral', 'Icms'])}<div class="rl-t">Ajustes</div>${so(['par', 'mem'])}</nav><div class="mod-c">${corpo}</div></div>`;
+  // planilha larga cabe melhor com a lateral: reduz até 85% antes de precisar rolar
+  const xl = document.querySelector('#secScp .xl-wrap table.xl');
+  if (xl) { const b = xl.parentElement; xl.style.zoom = 1; xl.style.zoom = Math.max(.85, Math.min(1, (b.clientWidth - 26) / xl.offsetWidth)); }
   window.scrollTo(0, y);
 }
-let SCP_ABA = 'Pis.Cofins';
-const XL_COR = {tit: ['0A1E31', 'FFFFFF'], sub: ['CFD4D9', '0E2841'], clr: ['C3C9CF', '000000'], pag: ['CFD4D9', '000000'], cinza: ['A6A6A6', '000000'], totg: ['0A1E31', 'FFFFFF'], cab: ['0A1E31', 'FFFFFF']};
+let SCP_ABA = 'res';
+// aba Resumo: só lê o que o cálculo e a planilha da estratégia já trazem
+function scpResumo(k) {
+  const pl = n => (k.planilha || []).find(p => p.nome === n) || {cel: {}};
+  // na aba Economia o quadro de fechamento fica embaixo; o "Faturamento" de cima é o do regime anterior
+  const rot = (n, t) => { const c = pl(n).cel; const ref = Object.keys(c).filter(r => /^A\d+$/.test(r) && String(c[r].v || '').trim().toLowerCase() === t.toLowerCase()).sort((a, b) => +b.slice(1) - +a.slice(1))[0]; const v = ref ? (c['B' + ref.slice(1)] || {}).v : null; return typeof v === 'number' ? v : 0; };
+  const pct = v => String((100 * (v || 0)).toFixed(2)).replace('.', ',') + '%';
+  const fat = rot('Economia', 'Faturamento'), comp = rot('Economia', 'Carga comparativa'), est = rot('Economia', 'Carga com estratégia'), eco = rot('Economia', 'ECONOMIA TRIBUTÁRIA'), exito = rot('Economia', 'HONORÁRIO DE ÊXITO');
+  const pc = rot('Economia', '% carga do regime anterior'), pe = rot('Economia', '% carga com estratégia'), pex = rot('Economia', '% honorário de êxito');
+  const d = k.resumo.distribuicao, mp = k.matriz.pis, mc = k.matriz.cofins, mat = d.serv_matriz + d.loc_matriz, prod = Math.max(fat - d.serv_total - d.loc_total, 0), tm = prod + mat, ts = d.serv_scp + d.loc_scp, tt = tm + ts;
+  const ir = n => `<button class="lnk" onclick="SCP_ABA='${n}';desenharSCP()">ver planilha</button>`;
+  const kpi = (cls, r, v, dd) => `<div class="kpi ${cls}"><div class="r">${r}</div><div class="v">${v}</div><div class="d">${dd}</div></div>`;
+  const mx = Math.max(comp, est, 1);
+  const barra = (r, v, p, cls) => `<div class="sb-l"><div class="t"><span>${r}</span><b>${rs(v)} <small>${pct(p)}</small></b></div><div class="tr"><i class="${cls}" style="width:${Math.max(100 * Math.max(v, 0) / mx, 0.5)}%"></i></div></div>`;
+  const lin = (t, a, b, cls) => `<tr class="${cls || ''}"><td>${t}</td><td class="num">${brl(a)}</td><td class="num">${brl(b)}</td><td class="num">${brl(a + b)}</td></tr>`;
+  const ec = pl('Economia').cel, imp = [5, 6, 7, 8, 9, 10, 11, 12, 14].map(r => ({r: String((ec['J' + r] || {}).v || ''), m: (ec['K' + r] || {}).v || 0, s: (ec['L' + r] || {}).v || 0})).filter(x => x.r && (x.m || x.s));
+  const fatoM = (ec.K15 || {}).v || 0, fatoS = (ec.L15 || {}).v || 0;
+  const ord = {risco: 0, alerta: 1, info: 2}, al = k.alertas.slice().sort((a, b) => ord[a.sev] - ord[b.sev]), fortes = al.filter(a => a.sev !== 'info');
+  const saldo = mp.saldo_credor_final + mc.saldo_credor_final, rec = mp.a_recolher + mc.a_recolher;
+  return `<div class="painel kpis q4 scp-hero">
+      ${kpi('neutro', 'Faturamento', rs(fat), (k.linhas_exportacao || []).length ? 'sem exportação' : 'do mês')}
+      ${kpi('alerta', 'Carga no regime anterior', rs(comp), pct(pc) + ' do faturamento')}
+      ${kpi('neutro', 'Carga com a estratégia', rs(est), pct(pe) + ' do faturamento')}
+      ${kpi(eco >= 0 ? 'ok' : 'erro', 'Economia tributária', rs(eco), 'êxito ' + pct(pex).replace(',00', '') + ': ' + rs(exito))}
+    </div>
+    <div class="scp-g">
+      <div class="painel"><div class="ph">Carga tributária ${ir('Economia')}</div><div class="sb">${barra('Regime anterior', comp, pc, 'c-ant')}${barra('Com a estratégia', est, pe, 'c-est')}</div></div>
+      <div class="painel"><div class="ph">Para onde foi o faturamento ${ir('Pis.Cofins')}</div>
+        <div class="sb"><div class="st">${tm ? `<i class="c-est" style="width:${100 * tm / (tt || 1)}%">${tm / (tt || 1) > .12 ? 'Matriz ' + Math.round(100 * tm / tt) + '%' : ''}</i>` : ''}${ts ? `<i class="c-scp" style="width:${100 * ts / (tt || 1)}%">${ts / (tt || 1) > .12 ? 'SCP ' + Math.round(100 * ts / tt) + '%' : ''}</i>` : ''}</div></div>
+        <table class="pn-t"><thead><tr><th></th><th class="num">Matriz</th><th class="num">SCP</th><th class="num">Total</th></tr></thead><tbody>${lin('Produtos', prod, 0)}${lin('Serviços', d.serv_matriz, d.serv_scp)}${lin('Locação', d.loc_matriz, d.loc_scp)}${lin('Total', tm, ts, 'tot')}</tbody></table></div>
+      <div class="painel"><div class="ph">PIS/COFINS da Matriz ${ir('Pis.Cofins')}</div>
+        <table class="pn-t"><thead><tr><th></th><th class="num">PIS</th><th class="num">COFINS</th></tr></thead><tbody>
+          <tr><td>Base do débito</td><td class="num">${brl(mp.base_deb)}</td><td class="num">${brl(mc.base_deb)}</td></tr>
+          <tr><td>Débito</td><td class="num">${brl(mp.debito)}</td><td class="num">${brl(mc.debito)}</td></tr>
+          <tr><td>Créditos do mês</td><td class="num">${brl(mp.cred_periodo)}</td><td class="num">${brl(mc.cred_periodo)}</td></tr>
+          <tr><td>Saldo do mês anterior</td><td class="num">${brl(mp.saldo_ant)}</td><td class="num">${brl(mc.saldo_ant)}</td></tr>
+          <tr class="tot"><td>${rec > 0.005 ? 'A recolher' : 'Saldo credor para o próximo mês'}</td><td class="num">${brl(rec > 0.005 ? mp.a_recolher : mp.saldo_credor_final)}</td><td class="num">${brl(rec > 0.005 ? mc.a_recolher : mc.saldo_credor_final)}</td></tr>
+        </tbody></table>${rec > 0.005 && saldo > 0.005 ? `<div class="apu-nota">Saldo credor para o próximo mês: ${rs(saldo)}.</div>` : ''}</div>
+      <div class="painel"><div class="ph">Impostos do mês ${ir('Economia')}</div>
+        <table class="pn-t"><thead><tr><th></th><th class="num">Matriz</th><th class="num">SCP</th></tr></thead><tbody>
+          ${imp.map(x => `<tr><td>${esc(x.r.replace(' (compensa)', ''))}${/compensa/i.test(x.r) ? ' <span class="cn">compensa</span>' : ''}</td><td class="num">${brl(x.m)}</td><td class="num">${brl(x.s)}</td></tr>`).join('') || '<tr><td colspan="3" class="vazio-res">Nenhum imposto no mês.</td></tr>'}
+          <tr class="tot"><td>Pagamento de fato</td><td class="num">${brl(fatoM)}</td><td class="num">${brl(fatoS)}</td></tr></tbody></table></div>
+    </div>
+    <div class="scp-faixa"><span><b>Trimestre até agora</b> ${ir('Fechamento Trimestral')}</span><span>Faturamento <b>${rs(rot('Fechamento Trimestral', 'Faturamento do trimestre'))}</b></span><span>Economia <b>${rs(rot('Fechamento Trimestral', 'ECONOMIA TRIBUTÁRIA'))}</b></span><span>Êxito <b>${rs(rot('Fechamento Trimestral', 'HONORÁRIO DE ÊXITO'))}</b></span></div>
+    ${al.length ? `<div class="painel scp-al"><div class="ph">Pontos de atenção <small>${fortes.length ? fortes.length + ' para validar' : 'só informações'}</small><span style="margin-left:auto"><button class="lnk" onclick="SCP_ABA='mem';desenharSCP()">ver todos (${al.length})</button></span></div>
+      ${(fortes.length ? fortes : al).slice(0, 4).map(a => `<div class="al-scp ${a.sev}"><span class="tag ${a.sev === 'risco' ? 'erro' : a.sev === 'alerta' ? 'alerta' : 'info'}">${a.sev === 'risco' ? 'Risco' : a.sev === 'alerta' ? 'Validar' : 'Info'}</span> ${esc(a.txt)}</div>`).join('')}</div>` : ''}`;
+}
+const XL_COR = {tit: ['212E50', 'FFFFFF'], sub: ['E9F0F9', '212E50'], clr: ['F3F5F9', '212E50'], pag: ['E9EDF4', '212E50'], cinza: ['DDE3EC', '212E50'], totg: ['212E50', 'FFFFFF'], cab: ['212E50', 'FFFFFF']};
 function edAtivo(ed) {
   const c = SCPR.cfg;
   if (ed.startsWith('@serv') || ed.startsWith('@loc')) return c.modo === 'manual';
@@ -1932,7 +1989,7 @@ function triEdit(i, campo, v) {
   else t[i][campo] = v;
   setSCP({tri_outros_meses: t, tri_manual: true}, true);
 }
-function baixarSCP(fmt) { const a = document.createElement('a'); a.href = '/api/relatorio?tipo=scp&formato=' + fmt; if (fmt === 'pdf') a.target = '_blank'; document.body.appendChild(a); a.click(); a.remove(); }
+function baixarSCP(fmt, aba) { const a = document.createElement('a'); a.href = '/api/relatorio?tipo=scp&formato=' + fmt + (aba ? '&aba=' + encodeURIComponent(aba) : ''); if (fmt === 'pdf' && aba !== 'todas') a.target = '_blank'; document.body.appendChild(a); a.click(); a.remove(); }
 
 // ------------------------------------------------------------------ notas de serviço lançadas à mão
 let MAN = [], MAN_ED = null;

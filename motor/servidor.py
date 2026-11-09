@@ -515,12 +515,15 @@ class H(BaseHTTPRequestHandler):
                     if q.get('ibs'):
                         res['estrategico']['reforma']['ref_ibs'] = float(q['ibs'])
                 dados = relatorios.gerar(res, _json(APURACAO, {}), q.get('tipo', 'impostos'), fmt, receita=q.get('receita', 'consolidado'),
-                                         direcao=q.get('direcao', 'ambos'), quem=q.get('quem', 'ambos'))
+                                         direcao=q.get('direcao', 'ambos'), quem=q.get('quem', 'ambos'), aba=q.get('aba'))
                 if fmt == 'json':
                     return self._env(200, dados)
-                nome = 'Relatorio_%s_%s_%s.%s' % (q.get('tipo', ''), res['empresa'].get('cnpj', ''), (res.get('competencia') or '').replace('-', ''), fmt)
-                tipo_mime = 'application/pdf' if fmt == 'pdf' else 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                return self._env(200, dados, tipo_mime, {'Content-Disposition': '%s; filename="%s"' % ('inline' if fmt == 'pdf' else 'attachment', nome)})
+                aba = q.get('aba') if q.get('tipo') == 'scp' and fmt == 'pdf' else None
+                ext = 'zip' if aba == 'todas' else fmt
+                nome = 'Relatorio_%s_%s_%s%s.%s' % (q.get('tipo', ''), res['empresa'].get('cnpj', ''), (res.get('competencia') or '').replace('-', ''),
+                                                   ('_' + re.sub(r'[^A-Za-z0-9]+', '_', aba)) if aba and aba != 'todas' else '', ext)
+                tipo_mime = {'pdf': 'application/pdf', 'zip': 'application/zip'}.get(ext, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                return self._env(200, dados, tipo_mime, {'Content-Disposition': '%s; filename="%s"' % ('inline' if ext == 'pdf' else 'attachment', nome)})
             if u.path == '/api/corrigidos':
                 return self._env(200, _json(CORRIGIDOS, {}))
             if u.path == '/api/exportar':
