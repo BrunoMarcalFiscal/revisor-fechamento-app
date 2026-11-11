@@ -566,6 +566,18 @@ label.chk{display:flex!important;flex-direction:row!important;align-items:center
 .pt-meses{display:flex;flex-wrap:wrap;gap:4px;min-width:140px}
 .pt-mes{border:1px solid var(--borda);background:#fff;border-radius:4px;padding:2px 7px;font:inherit;font-size:12px;cursor:pointer;color:inherit}
 .pt-mes:hover{border-color:#2563A8;color:#2563A8}.pt-mes.on{background:#E8F0FB;border-color:#2563A8;color:#2563A8;font-weight:600}
+.pc-nota{font-size:12px;color:var(--suave);margin:-4px 0 12px}
+.pc-barra{display:flex;justify-content:flex-end;margin-bottom:10px}
+.pc-duas{align-items:start}
+.pc-g{cursor:pointer}.pc-g:hover td{background:#F5F8FC}.pc-g.on td{background:#E8F0FB}
+.pc-in{width:110px;text-align:right;border:1px solid var(--borda);border-radius:6px;padding:4px 6px;font:inherit;font-variant-numeric:tabular-nums}
+.pc-aj{padding:10px 12px;border-top:1px solid var(--borda2)}.pc-ajt{font-weight:700;color:var(--navy);margin-bottom:6px}.pc-ajt small{font-weight:400;color:var(--fraco)}
+.pc-ajl{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}.pc-ajl span{flex:1 1 140px}
+.pc-ajl input,.pc-ajl select{border:1px solid var(--borda);border-radius:6px;padding:4px 6px;font:inherit}.pc-ajl #pcAjDesc{flex:1 1 180px}
+.pc-f{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;font-weight:400}.pc-f select,.pc-f input{border:1px solid var(--borda);border-radius:6px;padding:4px 6px;font:inherit;font-size:12px}
+.pc-f input{width:240px;max-width:100%}
+.pc-it td{vertical-align:top}.pc-dec{border:1px solid #E0A23B;border-radius:6px;padding:3px 6px;font:inherit;font-size:12px;max-width:240px}
+.tbl-x{overflow-x:auto}
 </style>
 </head>
 <body>
@@ -583,6 +595,7 @@ label.chk{display:flex!important;flex-direction:row!important;align-items:center
     <div class="grp">Fechamento</div>
     <button id="abaApu" onclick="mostrar('apu')" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M8 18h8"/></svg><span>Apuração ICMS/IPI</span></button>
     <button id="abaScp" onclick="mostrar('scp')" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M4 17h6"/><circle cx="17" cy="7" r="3"/><circle cx="13" cy="17" r="3"/></svg><span>Estratégia SCP</span></button>
+    <button id="abaPc" class="oculto" onclick="mostrar('pc')" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></svg><span>PIS/COFINS</span><b class="badge" id="badgePc"></b></button>
     <div class="grp">Gestão</div>
     <button id="abaPnl" onclick="mostrar('pnl')" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg><span>Painel da empresa</span></button>
     <button id="abaEst" onclick="mostrar('est')" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg><span>Visão estratégica</span></button>
@@ -620,6 +633,7 @@ label.chk{display:flex!important;flex-direction:row!important;align-items:center
 <section id="secRel" class="oculto"></section>
 <section id="secHist" class="oculto"></section>
 <section id="secPortal" class="oculto"></section>
+<section id="secPc" class="oculto"></section>
 </main>
 </div></div>
 <input type="file" id="arq" multiple class="oculto">
@@ -822,7 +836,7 @@ async function novo(cnpj, nome) {
   if (!confirm(nome ? `Começar um fechamento novo de ${nome}? O fechamento aberto agora fica guardado e a tela é limpa.` : 'Começar um fechamento novo? O fechamento atual fica guardado em "Fechamentos" e a tela é limpa.')) return;
   EST = await api('/api/limpar?card=tudo', {method:'POST'}); PL = await api('/api/planilha'); RES = null; COR = {};
   $('#inCnpj').value = ''; $('#inComp').value = ''; $('#topEmp').innerHTML = '<div class="emp-vz">Nenhum fechamento aberto</div>'; $('#badgeRes').textContent = ''; MAN = []; MAN_ED = null; desenharManuais();
-  $('#abaRes').disabled = true; $('#abaApu').disabled = true; $('#abaPnl').disabled = true; $('#abaRel').disabled = true; $('#abaEst').disabled = true; $('#abaScp').disabled = true; APU = null; desenharSituacao(); $('#btnExport').disabled = true; $('#btnErros').disabled = true; $('#btnCliente').disabled = true; $('#abaScp').style.display = scpOk(cnpj) ? '' : 'none'; mostrar('docs'); desenharCards(); msg('');
+  $('#abaRes').disabled = true; $('#abaApu').disabled = true; $('#abaPnl').disabled = true; $('#abaRel').disabled = true; $('#abaEst').disabled = true; $('#abaScp').disabled = true; APU = null; desenharSituacao(); $('#btnExport').disabled = true; $('#btnErros').disabled = true; $('#btnCliente').disabled = true; $('#abaScp').style.display = scpOk(cnpj) ? '' : 'none'; $('#abaPc').classList.add('oculto'); mostrar('docs'); desenharCards(); msg('');
   if (typeof cnpj === 'string' && cnpj) { $('#inCnpj').value = cnpj; const d = document.querySelector('.doc-op'); if (d) d.open = true;
     $('#topEmp').innerHTML = `<b>${esc(nome || 'Empresa')}</b><span>CNPJ ${esc(cnpjFmt(cnpj))}</span><span class="emp-comp">Fechamento novo</span>`; msg('Envie os arquivos do mês, confira a competência e clique em Calcular.'); }
 }
@@ -851,18 +865,20 @@ async function calcular() {
 }
 
 function mostrar(q) {
-  $('#secDocs').classList.toggle('oculto', q !== 'docs'); $('#secRes').classList.toggle('oculto', q !== 'res'); $('#secApu').classList.toggle('oculto', q !== 'apu'); $('#secPnl').classList.toggle('oculto', q !== 'pnl'); $('#secRel').classList.toggle('oculto', q !== 'rel'); $('#secEst').classList.toggle('oculto', q !== 'est'); $('#secScp').classList.toggle('oculto', q !== 'scp'); $('#secHist').classList.toggle('oculto', q !== 'hist'); $('#secPortal').classList.toggle('oculto', q !== 'portal'); $('#abaPortal').classList.toggle('on', q === 'portal');
+  $('#secDocs').classList.toggle('oculto', q !== 'docs'); $('#secRes').classList.toggle('oculto', q !== 'res'); $('#secApu').classList.toggle('oculto', q !== 'apu'); $('#secPnl').classList.toggle('oculto', q !== 'pnl'); $('#secRel').classList.toggle('oculto', q !== 'rel'); $('#secEst').classList.toggle('oculto', q !== 'est'); $('#secScp').classList.toggle('oculto', q !== 'scp'); $('#secHist').classList.toggle('oculto', q !== 'hist'); $('#secPortal').classList.toggle('oculto', q !== 'portal'); $('#secPc').classList.toggle('oculto', q !== 'pc'); $('#abaPc').classList.toggle('on', q === 'pc'); $('#abaPortal').classList.toggle('on', q === 'portal');
   $('#abaDocs').classList.toggle('on', q === 'docs'); $('#abaRes').classList.toggle('on', q === 'res'); $('#abaApu').classList.toggle('on', q === 'apu'); $('#abaPnl').classList.toggle('on', q === 'pnl'); $('#abaRel').classList.toggle('on', q === 'rel'); $('#abaEst').classList.toggle('on', q === 'est'); $('#abaScp').classList.toggle('on', q === 'scp');
   const PG = {docs: ['Documentos', 'Envie os arquivos do mês e clique em Calcular.'], res: ['Resultado da conferência', 'Cada nota contra o lançamento do sistema: o que está errado, onde e como corrigir.'],
     apu: ['Apuração de ICMS e IPI', 'Livro por CFOP e CST, ajustes da apuração e o saldo do mês.'], scp: ['Estratégia SCP', 'Matriz no Lucro Real × SCP no Lucro Presumido, no layout da planilha de fechamento.'],
     pnl: ['Painel da empresa', 'Faturamento de produtos, serviços e locações, impostos e quem compra e vende.'], est: ['Visão estratégica', 'Evolução, margem, créditos, projeções e riscos do mês.'],
     rel: ['Relatórios', 'Demonstrativos em PDF e Excel.'], hist: ['Fechamentos', 'Fechamentos guardados por empresa e competência.'],
+    pc: ['Apuração de PIS/COFINS', 'Não cumulativo: débitos das vendas, créditos das entradas, fretes e serviços, saldo e valor a recolher.'],
     portal: ['Fechamento Lucro Real', 'As empresas do escritório no Lucro Real: abra o mês ou comece um novo.']};
   if (PG[q]) { $('#pgTit').textContent = PG[q][0]; $('#pgSub').textContent = PG[q][1]; }
   if (q === 'scp') { SCPR = null; desenharSCP(); }
   if (q === 'est') desenharEstrategico();
   if (q === 'rel') desenharRelatorios();
   if (q === 'apu') desenharApuracao();
+  if (q === 'pc') desenharPC();
   if (q === 'pnl') { (async () => { if (!APU && RES && RES.apuracao && RES.apuracao.tem_planilha) await carregarApu(); desenharPainel(); })(); }
   window.scrollTo(0, 0);
 }
@@ -873,7 +889,8 @@ function abrirResultado() {
   const e = RES.empresa || {};
   $('#topEmp').innerHTML = `<b title="${esc(e.nome || '')}">${esc(e.nome || 'Empresa')}</b><span>CNPJ ${esc(cnpjFmt(e.cnpj))}${e.uf ? ' · ' + esc(e.uf) : ''}</span><span class="emp-comp">Competência ${esc((RES.competencia || '').split('-').reverse().join('/'))}</span>`;
   $('#abaRes').disabled = false; $('#btnExport').disabled = false; $('#btnErros').disabled = false; $('#btnCliente').disabled = false; $('#abaApu').disabled = !(RES.apuracao && RES.apuracao.tem_planilha) || RES.tem_icms === false;
-  $('#abaApu').title = RES.tem_icms === false ? 'Sem NF-e nem CT-e no mês: ICMS e IPI não se aplicam (só serviços).' : ''; $('#abaPnl').disabled = !RES.painel; $('#abaRel').disabled = false; $('#abaEst').disabled = COLAB(); $('#abaScp').disabled = COLAB(); $('#abaScp').style.display = scpOk(e.cnpj) ? '' : 'none'; desenharSituacao();
+  $('#abaApu').title = RES.tem_icms === false ? 'Sem NF-e nem CT-e no mês: ICMS e IPI não se aplicam (só serviços).' : ''; $('#abaPnl').disabled = !RES.painel; $('#abaRel').disabled = false; $('#abaEst').disabled = COLAB(); $('#abaScp').disabled = COLAB(); $('#abaScp').style.display = scpOk(e.cnpj) ? '' : 'none';
+  $('#abaPc').classList.toggle('oculto', !RES.piscofins); $('#abaPc').disabled = !RES.piscofins; $('#badgePc').textContent = (RES.piscofins && RES.piscofins.a_classificar) || ''; desenharSituacao();
   $('#badgeRes').textContent = RES.resumo.com_erro || '';
   VISAO = 'notas';
   desenharResultado(); mostrar('res');
@@ -1400,6 +1417,85 @@ async function abrirHistorico() {
     : '<div class="vz-p">Nenhum fechamento salvo ainda. O primeiro é guardado ao clicar em Calcular.</div>'}</div>`;
   mostrar('hist');
 }
+// ------------------------------------------------------------------ apuração de PIS/COFINS (Lucro Real não cumulativo)
+let PCF = {nat: null, lado: '', q: '', lim: 200};
+const rsx = v => 'R$ ' + brl(v || 0);
+function desenharPC() {
+  const pc = RES && RES.piscofins; if (!pc) { $('#secPc').innerHTML = '<div class="painel"><div class="vz-p">Sem apuração de PIS/COFINS neste fechamento.</div></div>'; return; }
+  const t = pc.totais, deb = t.pis_debito + t.cofins_debito, cre = t.pis_credito + t.cofins_credito, ant = t.pis_saldo_anterior + t.cofins_saldo_anterior;
+  const sc = t.pis_saldo_credor + t.cofins_saldo_credor;
+  const kp = `<div class="painel kpis apu-kpis">
+    <div class="kpi neutro"><div class="r">Débito do mês</div><div class="v" style="font-size:20px">${rsx(deb)}</div><div class="d">PIS ${brl(t.pis_debito)} · COFINS ${brl(t.cofins_debito)}</div></div>
+    <div class="kpi neutro"><div class="r">Créditos do mês</div><div class="v" style="font-size:20px">${rsx(cre)}</div><div class="d">PIS ${brl(t.pis_credito)} · COFINS ${brl(t.cofins_credito)}</div></div>
+    <div class="kpi neutro"><div class="r">Saldo credor anterior</div><div class="v" style="font-size:20px">${rsx(ant)}</div><div class="d">${esc(pc.cfg.saldo_origem || 'informe abaixo, se houver')}</div></div>
+    <div class="kpi ${t.total_recolher ? 'alerta' : 'ok'}"><div class="r">${t.total_recolher ? 'A recolher' : 'Saldo credor'}</div><div class="v" style="font-size:20px">${rsx(t.total_recolher || sc)}</div>
+      <div class="d">${t.total_recolher ? `PIS ${brl(t.pis_recolher)} · COFINS ${brl(t.cofins_recolher)}` : `PIS ${brl(t.pis_saldo_credor)} · COFINS ${brl(t.cofins_saldo_credor)} para o mês seguinte`}</div></div></div>`;
+  const av = [];
+  if (pc.a_classificar) av.push(`<b>${pc.a_classificar} item(ns) "A classificar"</b> estão sem crédito até alguém decidir. A escolha vale para o mesmo fornecedor e produto (ou prestador) neste e nos próximos meses.`);
+  (pc.alertas || []).forEach(a => av.push(esc(a)));
+
+  const tab = (tit, gs, cred) => `<div class="painel"><div class="ph">${tit}</div><div class="tbl-x"><table class="pn-t"><thead><tr><th>Natureza</th>${cred ? '<th>Situação</th>' : ''}<th class="num">Itens</th><th class="num">Valor</th><th class="num">Base</th><th class="num">PIS</th><th class="num">COFINS</th></tr></thead><tbody>
+    ${gs.map(g => `<tr class="pc-g${PCF.nat === g.natureza + '|' + (g.situacao || '') ? ' on' : ''}" onclick="pcFiltro('${esc((g.natureza + '|' + (g.situacao || '')).replace(/'/g, ''))}')" title="${esc(g.motivo || '')}"><td><b>${esc(g.natureza)}</b><span class="sb">${esc(g.motivo || '')}</span></td>
+      ${cred ? `<td><span class="tag ${g.situacao === 'Crédito' ? 'ok' : g.situacao === 'Verificar' ? 'alerta' : g.situacao === 'Estorno' ? 'erro' : 'info'}">${esc(g.situacao)}</span></td>` : ''}
+      <td class="num">${g.itens}</td><td class="num">${brl(g.valor)}</td><td class="num">${brl(g.base)}</td><td class="num">${brl(g.pis)}</td><td class="num">${brl(g.cofins)}</td></tr>`).join('')}
+    <tr class="tot"><td>Total</td>${cred ? '<td></td>' : ''}<td class="num">${gs.reduce((a, g) => a + g.itens, 0)}</td><td class="num">${brl(gs.reduce((a, g) => a + g.valor, 0))}</td><td class="num">${brl(gs.reduce((a, g) => a + g.base, 0))}</td>
+      <td class="num">${brl(gs.reduce((a, g) => a + g.pis, 0))}</td><td class="num">${brl(gs.reduce((a, g) => a + g.cofins, 0))}</td></tr></tbody></table></div></div>`;
+  const fim = `<div class="painel"><div class="ph">Fechamento do mês</div><table class="pn-t"><thead><tr><th></th><th class="num">PIS</th><th class="num">COFINS</th></tr></thead><tbody>
+    <tr><td>Débito do mês</td><td class="num">${brl(t.pis_debito)}</td><td class="num">${brl(t.cofins_debito)}</td></tr>
+    <tr><td>(-) Créditos do mês</td><td class="num">${brl(t.pis_credito)}</td><td class="num">${brl(t.cofins_credito)}</td></tr>
+    <tr><td>(-) Saldo credor anterior</td><td class="num"><input class="pc-in" value="${brl(t.pis_saldo_anterior)}" onchange="pcSaldo('pis', this.value)"></td><td class="num"><input class="pc-in" value="${brl(t.cofins_saldo_anterior)}" onchange="pcSaldo('cofins', this.value)"></td></tr>
+    <tr><td>(-) Retido na fonte (NFS-e prestadas)</td><td class="num">${brl(t.pis_retido)}</td><td class="num">${brl(t.cofins_retido)}</td></tr>
+    <tr class="tot"><td>= A recolher</td><td class="num">${brl(t.pis_recolher)}</td><td class="num">${brl(t.cofins_recolher)}</td></tr>
+    <tr class="sub"><td>Saldo credor para o mês seguinte</td><td class="num">${brl(t.pis_saldo_credor)}</td><td class="num">${brl(t.cofins_saldo_credor)}</td></tr></tbody></table>
+    <div class="pc-aj"><div class="pc-ajt">Ajustes <small>(entram no débito ou no crédito; ex.: crédito extemporâneo, receita fora dos XML)</small></div>
+    ${(pc.cfg.ajustes || []).map((a, i) => `<div class="pc-ajl"><span>${a.tipo === 'debito' ? 'Débito' : 'Crédito'}: ${esc(a.desc)}</span><span>PIS ${brl(a.pis)} · COFINS ${brl(a.cofins)}</span><button class="btn peq" onclick="pcAjusteDel(${i})">Excluir</button></div>`).join('')}
+    <div class="pc-ajl"><select id="pcAjTipo"><option value="credito">Crédito</option><option value="debito">Débito</option></select><input id="pcAjDesc" placeholder="Descrição"><input id="pcAjPis" class="pc-in" placeholder="PIS"><input id="pcAjCof" class="pc-in" placeholder="COFINS"><button class="btn peq pri" onclick="pcAjusteAdd()">Incluir</button></div></div></div>`;
+  $('#secPc').innerHTML = `<div class="pc-barra"><button class="btn peq" onclick="location.href='/api/piscofins/excel'">Baixar Excel</button></div>${kp}
+    ${av.map(a => `<div class="aviso">${a}</div>`).join('')}
+    <div class="pc-nota">Empresa tratada como <b>${pc.fabricante ? 'fabricante de monofásico' : 'comércio'}</b>: ${pc.fabricante ? 'venda de produção própria de 33.03 a 33.07 a 2,20% / 10,30% (Lei 10.147/00); revenda a alíquota zero.' : 'revenda de monofásico a alíquota zero e sem crédito na compra (Tema 1093 do STJ).'} Clique numa natureza para ver os itens.</div>
+    <div class="duas pc-duas">${tab('Débitos por natureza', pc.debitos, false)}${fim}</div>
+    ${tab('Créditos por natureza', pc.creditos, true)}
+    ${desenharPCItens(pc)}`;
+}
+function desenharPCItens(pc) {
+  const [nat, sit] = PCF.nat ? PCF.nat.split('|') : [null, null];
+  const q = PCF.q.toLowerCase();
+  let ls = pc.linhas.map((l, i) => Object.assign({i}, l)).filter(l => (!nat || (l.natureza === nat && (!sit || l.situacao === sit))) && (!PCF.lado || l.lado === PCF.lado || (PCF.lado === 'verificar' && l.situacao === 'Verificar'))
+    && (!q || [l.doc, l.part, l.produto, l.NCM, l.CFOP].join(' ').toLowerCase().includes(q)));
+  if (!nat && !PCF.lado && !q && pc.a_classificar) ls = ls.filter(l => l.situacao === 'Verificar');
+  const n = ls.length; ls = ls.slice(0, PCF.lim);
+  const op = l => (l.lado === 'tomado' ? pc.opcoes_servico : pc.opcoes_entrada);
+  const tit = nat ? `Itens: ${esc(nat)}${sit ? ' · ' + esc(sit) : ''}` : (!PCF.lado && !q && pc.a_classificar ? 'Itens a classificar' : 'Itens');
+  return `<div class="painel" id="pcItens"><div class="ph">${tit} <small>${n} item(ns)${n > PCF.lim ? ', mostrando ' + PCF.lim : ''}</small>
+    <span class="pc-f"><select onchange="PCF.lado=this.value;PCF.nat=null;desenharPC()">${[['', 'Todos'], ['verificar', 'A classificar'], ['saida', 'Saídas'], ['entrada', 'Entradas'], ['frete', 'CT-e'], ['tomado', 'Serviços tomados'], ['prestado', 'Serviços prestados']].map(([v, r]) => `<option value="${v}" ${PCF.lado === v ? 'selected' : ''}>${r}</option>`).join('')}</select>
+    <input placeholder="Buscar nota, participante, produto, NCM" value="${esc(PCF.q)}" onchange="PCF.q=this.value;desenharPC()">${nat ? '<button class="btn peq" onclick="PCF.nat=null;desenharPC()">Limpar</button>' : ''}</span></div>
+    <div class="tbl-x"><table class="pn-t pc-it"><thead><tr><th>Documento</th><th>Participante</th><th>Produto / serviço</th><th>NCM</th><th>CFOP</th><th class="num">Valor</th><th>Natureza</th><th class="num">Base</th><th class="num">PIS</th><th class="num">COFINS</th></tr></thead><tbody>
+    ${ls.map(l => `<tr><td>${esc(l.doc)}<span class="sb">${esc((l.data || '').split('-').reverse().join('/'))}</span></td><td>${esc(l.part || '')}</td><td>${esc(l.produto || '')}</td><td>${esc(l.NCM || '')}</td><td>${esc(l.CFOP || '')}</td>
+      <td class="num">${brl(l.valor)}</td><td>${l.situacao === 'Verificar' && (l.lado === 'entrada' || l.lado === 'tomado') ? `<select class="pc-dec" onchange="pcDecidir(${l.i}, this.value)"><option value="">Escolher natureza…</option>${op(l).map(o => `<option>${esc(o)}</option>`).join('')}</select><span class="sb">${esc(l.motivo || '')}</span>`
+        : `${esc(l.natureza)}<span class="sb">${esc(l.situacao)}${l.origem === 'decisão' ? ' · decisão na tela' : ''}</span>`}</td>
+      <td class="num">${brl(l.base)}</td><td class="num">${brl(l.pis)}</td><td class="num">${brl(l.cofins)}</td></tr>`).join('') || '<tr><td colspan="10" class="vz-p">Nada aqui.</td></tr>'}</tbody></table></div>
+    ${n > PCF.lim ? `<div class="vz-p"><button class="btn peq" onclick="PCF.lim+=500;desenharPC()">Mostrar mais</button></div>` : ''}</div>`;
+}
+function pcFiltro(k) { PCF.nat = PCF.nat === k ? null : k; PCF.lado = ''; PCF.lim = 200; desenharPC(); setTimeout(() => { const e = $('#pcItens'); if (e) e.scrollIntoView({behavior: 'smooth', block: 'start'}); }, 30); }
+const pcNum = v => Number(String(v || '0').replace(/\./g, '').replace(',', '.')) || 0;
+async function pcPost(url, corpo) {
+  try { RES.piscofins = await api(url, {method: 'POST', body: JSON.stringify(corpo)}); $('#badgePc').textContent = RES.piscofins.a_classificar || ''; desenharPC(); }
+  catch (e) { alert(e.message); }
+}
+function pcSaldo(imp, v) { const t = RES.piscofins.totais; pcPost('/api/piscofins/cfg', {saldo_pis_ant: imp === 'pis' ? pcNum(v) : t.pis_saldo_anterior, saldo_cofins_ant: imp === 'cofins' ? pcNum(v) : t.cofins_saldo_anterior}); }
+function pcAjusteAdd() {
+  const a = {tipo: $('#pcAjTipo').value, desc: $('#pcAjDesc').value.trim(), pis: pcNum($('#pcAjPis').value), cofins: pcNum($('#pcAjCof').value)};
+  if (!a.desc || !(a.pis || a.cofins)) return alert('Informe a descrição e o valor do PIS e/ou da COFINS.');
+  pcPost('/api/piscofins/cfg', {ajustes: (RES.piscofins.cfg.ajustes || []).concat([a])});
+}
+function pcAjusteDel(i) { const aj = (RES.piscofins.cfg.ajustes || []).slice(); aj.splice(i, 1); pcPost('/api/piscofins/cfg', {ajustes: aj}); }
+function pcDecidir(i, nat) {
+  if (!nat) return;
+  const l = RES.piscofins.linhas[i];
+  if (!confirm(`Classificar como "${nat}"?\n\nVale para ${l.lado === 'tomado' ? 'todas as notas deste prestador' : 'este produto deste fornecedor'}, neste mês e nos próximos.`)) return desenharPC();
+  pcPost('/api/piscofins/decidir', {idx: i, natureza: nat});
+}
+
 // ------------------------------------------------------------------ painel do Lucro Real (login do escritório)
 let PORTAL = null;
 const scpOk = cnpj => !PERFIL.portal || !PORTAL || (PORTAL.empresas || []).some(e => e.scp && e.cnpj.slice(0, 8) === String(cnpj || '').replace(/\D/g, '').slice(0, 8));

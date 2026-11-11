@@ -2,7 +2,7 @@
 """Servidor local do Revisor do Fechamento (só biblioteca padrão + openpyxl/PyMuPDF já instalados)."""
 import glob, os, json, zipfile, io, shutil, re, threading, time, traceback, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from . import comparador, planilha, exportar, relatorios, estrategico, scp, scp_planilha, espelho
+from . import comparador, planilha, exportar, relatorios, estrategico, scp, scp_planilha, espelho, piscofins
 
 RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # dados (sessão, resultados, histórico, configurações) podem ficar fora do código: REVISOR_DADOS (disco do servidor)
@@ -14,6 +14,8 @@ CFG = os.path.join(SESSAO, 'config.json')
 AJUSTES = os.path.join(SESSAO, 'ajustes_planilha.json')
 CORRIGIDOS = os.path.join(SESSAO, 'corrigidos.json')
 APURACAO = os.path.join(SESSAO, 'apuracao.json')
+PC_CFG = os.path.join(SESSAO, 'piscofins.json')   # saldo credor anterior e ajustes do PIS/COFINS do mês aberto
+PC_MEMORIA = os.path.join(DADOS, 'config', 'pc_memoria.json')   # classificação de entradas/serviços já decidida, por empresa
 SCP_CFG = os.path.join(SESSAO, 'scp.json')
 MANUAIS = os.path.join(SESSAO, 'manuais.json')
 CANCELADAS = os.path.join(SESSAO, 'canceladas.json')
@@ -66,7 +68,8 @@ def portal_empresas():
         for parte in re.split(r'[;\n]', txt):
             c = [x.strip() for x in parte.split(':')]
             if c and re.sub(r'\D', '', c[0]):
-                out.append({'cnpj': re.sub(r'\D', '', c[0]), 'nome': c[1] if len(c) > 1 else '', 'scp': len(c) > 2 and c[2].lower() == 'scp'})
+                marcas = {x.lower() for x in c[2:]}
+                out.append({'cnpj': re.sub(r'\D', '', c[0]), 'nome': c[1] if len(c) > 1 else '', 'scp': 'scp' in marcas, 'pc': 'pc' in marcas})
         return out
     return [dict(e, cnpj=re.sub(r'\D', '', e.get('cnpj') or '')) for e in _json(os.path.join(DADOS, 'config', 'portal.json'), [])]
 
@@ -78,6 +81,31 @@ def scp_liberada(cnpj):
         return True
     raiz = re.sub(r'\D', '', cnpj or '')[:8]
     return any(e.get('scp') and e['cnpj'][:8] == raiz for e in emp)
+
+
+def pc_liberado(cnpj):
+    """Apuração de PIS/COFINS no Revisor: só para as empresas do portal marcadas com pc."""
+    raiz = re.sub(r'\D', '', cnpj or '')[:8]
+    return any(e.get('pc') and e['cnpj'][:8] == raiz for e in portal_empresas())
+
+
+def pc_cfg(cnpj, competencia):
+    """Saldo credor anterior (do fechamento do mês anterior, se guardado) e ajustes já lançados neste mês."""
+    cfg = _json(PC_CFG, {})
+    if cfg.get('competencia') != competencia or cfg.get('cnpj') != cnpj:
+        cfg = {}
+    if not cfg.get('saldo_manual'):
+        ant = (fechamento_anterior(cnpj, competencia) or {}).get('res') or {}
+        t = (ant.get('piscofins') or {}).get('totais') or {}
+        if t:
+            cfg.update(saldo_pis_ant=t.get('pis_saldo_credor') or 0, saldo_cofins_ant=t.get('cofins_saldo_credor') or 0,
+                       saldo_origem='saldo credor do fechamento de %s' % '/'.join(reversed(_comp_ant(competencia).split('-'))))
+    return cfg
+
+
+def pc_gravar(res):
+    json.dump(res, open(os.path.join(SAIDA, 'resultado.json'), 'w', encoding='utf-8'), ensure_ascii=False, default=list)
+    arquivar(json.loads(json.dumps(res, default=list)))
 
 
 def portal():
@@ -437,6 +465,22 @@ class H(BaseHTTPRequestHandler):
                 self.send_header('Content-Length', '0'); self.end_headers()
                 return True
             return self._env(401, LOGIN_HTML.replace('__ERRO__', '<div class="erro">Usuário ou senha incorretos.</div>'), 'text/html; charset=utf-8') or True
+        if u.path == '/api/importar-memoria-pc' and metodo == 'POST':
+            # memória de classificação do PIS/COFINS vinda do Mac: completa a do servidor sem apagar o que foi decidido aqui
+            import hmac
+            tok = os.environ.get('REVISOR_IMPORT_TOKEN') or ''
+            if not tok or not hmac.compare_digest(self.headers.get('X-Import-Token', ''), tok):
+                return self._env(403, {'erro': 'token inválido'}) or True
+            novo = json.loads(self._corpo() or b'{}')
+            atual = piscofins.ler_memoria(PC_MEMORIA)
+            for rz, tipos in novo.items():
+                for tipo, itens in (tipos or {}).items():
+                    dest = atual.setdefault(rz, {}).setdefault(tipo, {})
+                    for k, v in itens.items():
+                        dest.setdefault(k, v)
+            os.makedirs(os.path.dirname(PC_MEMORIA), exist_ok=True)
+            json.dump(atual, open(PC_MEMORIA, 'w', encoding='utf-8'), ensure_ascii=False)
+            return self._env(200, {'ok': True, 'empresas': {rz: {t: len(v) for t, v in x.items()} for rz, x in atual.items()}}) or True
         if u.path == '/api/importar-fechamento' and metodo == 'POST':
             # carga inicial do servidor: zip de um fechamento (pasta fechamentos/<id>), protegida por token próprio; a Estratégia SCP só entra no Revisor completo
             import hmac
@@ -551,6 +595,16 @@ class H(BaseHTTPRequestHandler):
                 return self._env(200, calcular_scp(res))
             if u.path == '/api/manuais':
                 return self._env(200, {'notas': _json(MANUAIS, [])})
+            if u.path == '/api/piscofins':
+                pc = (_json(os.path.join(SAIDA, 'resultado.json'), {}) or {}).get('piscofins')
+                return self._env(200, pc) if pc else self._env(404, {'erro': 'Sem apuração de PIS/COFINS neste fechamento.'})
+            if u.path == '/api/piscofins/excel':
+                res = _json(os.path.join(SAIDA, 'resultado.json'), {})
+                if not res.get('piscofins'):
+                    return self._env(404, {'erro': 'Sem apuração de PIS/COFINS.'})
+                nome = 'PIS_COFINS_%s_%s.xlsx' % ((res.get('empresa') or {}).get('cnpj') or '', (res.get('competencia') or '').replace('-', ''))
+                return self._env(200, relatorios.piscofins_excel(res), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                 {'Content-Disposition': 'attachment; filename="%s"' % nome})
             if u.path == '/api/estrategico':
                 res = _json(os.path.join(SAIDA, 'resultado.json'), None)
                 if not res:
@@ -687,6 +741,32 @@ class H(BaseHTTPRequestHandler):
                         os.remove(SCP_CFG)
                     return self._env(200, calcular_scp(res, {}))
                 return self._env(200, calcular_scp(res, b.get('cfg') or {}))
+            if u.path in ('/api/piscofins/cfg', '/api/piscofins/decidir'):
+                res = _json(os.path.join(SAIDA, 'resultado.json'), {})
+                pc = res.get('piscofins')
+                if not pc:
+                    return self._env(404, {'erro': 'Sem apuração de PIS/COFINS. Calcule antes.'})
+                b = json.loads(self._corpo() or b'{}')
+                cfg = dict(pc.get('cfg') or {})
+                if u.path.endswith('cfg'):
+                    for k in ('saldo_pis_ant', 'saldo_cofins_ant'):
+                        if k in b:
+                            cfg[k] = float(b[k] or 0); cfg['saldo_manual'] = True; cfg['saldo_origem'] = 'informado na tela'
+                    if 'ajustes' in b:
+                        cfg['ajustes'] = [{'desc': str(a.get('desc') or '')[:200], 'tipo': 'debito' if a.get('tipo') == 'debito' else 'credito',
+                                           'pis': float(a.get('pis') or 0), 'cofins': float(a.get('cofins') or 0)} for a in (b.get('ajustes') or [])]
+                else:
+                    idx, nat = int(b.get('idx', -1)), b.get('natureza') or ''
+                    if not (0 <= idx < len(pc['linhas'])) or nat not in (piscofins.OPCOES_SERVICO if pc['linhas'][idx]['lado'] == 'tomado' else piscofins.OPCOES_ENTRADA):
+                        return self._env(400, {'erro': 'Escolha inválida.'})
+                    linha = piscofins.aplicar_decisao(pc, idx, nat)
+                    piscofins.decidir(PC_MEMORIA, (res['empresa'].get('cnpj') or '')[:8], linha, nat)
+                os.makedirs(SESSAO, exist_ok=True)
+                json.dump(dict(cfg, cnpj=res['empresa'].get('cnpj'), competencia=res.get('competencia')), open(PC_CFG, 'w', encoding='utf-8'), ensure_ascii=False)
+                res['piscofins'] = piscofins.totalizar(pc, cfg)
+                res['piscofins']['cfg']['saldo_manual'] = bool(cfg.get('saldo_manual'))
+                pc_gravar(res)
+                return self._env(200, res['piscofins'])
             if u.path == '/api/fechamento/status':
                 b = json.loads(self._corpo() or b'{}')
                 meta = arquivar() or {}
@@ -810,7 +890,10 @@ class H(BaseHTTPRequestHandler):
                 cfg = {'cnpj': re.sub(r'\D', '', b.get('cnpj', '')), 'competencia': b.get('competencia', '')}
                 os.makedirs(SESSAO, exist_ok=True)
                 json.dump(cfg, open(CFG, 'w'), ensure_ascii=False)
-                res = comparador.executar(SESSAO, cfg['cnpj'], cfg['competencia'], _json(AJUSTES, {}), historico=fechamento_anterior)
+                res = comparador.executar(SESSAO, cfg['cnpj'], cfg['competencia'], _json(AJUSTES, {}), historico=fechamento_anterior,
+                                          pis_cofins={'ativo': pc_liberado, 'memoria': PC_MEMORIA, 'cfg': pc_cfg})
+                if res.get('piscofins'):
+                    piscofins.guardar_fracoes(PC_MEMORIA, (res.get('empresa') or {}).get('raiz') or (res['empresa']['cnpj'] or '')[:8], res['piscofins'].pop('_frac', {}))
                 com_doc = [n for n in res.get('notas', []) if n.get('arquivo')]
                 de_fora = [n for n in com_doc if any(a.get('cod') == 'OUTRA_EMPRESA' for a in n.get('aponts', []))]
                 if EMPRESA_OK and (not empresa_permitida((res.get('empresa') or {}).get('cnpj')) or (com_doc and len(de_fora) * 2 > len(com_doc))):

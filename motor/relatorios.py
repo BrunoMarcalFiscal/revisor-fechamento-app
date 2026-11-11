@@ -512,3 +512,64 @@ def gerar(res, apu, tipo, formato, **op):
             sec['totais'] = _totais(sec)
         return rel
     return xlsx(rel) if formato == 'xlsx' else pdf(rel)
+
+
+def piscofins_excel(res):
+    """Apuração de PIS/COFINS em Excel: resumo do mês, débitos e créditos por natureza e o detalhe item a item."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    pc = res['piscofins']; t = pc['totais']; e = res.get('empresa') or {}
+    wb = openpyxl.Workbook()
+
+    def aba(ws, titulo, colunas, linhas, total=None):
+        ws.append([titulo]); ws['A1'].font = Font(bold=True, size=13, color=NAVY)
+        ws.append(['%s · CNPJ %s · Competência %s' % (e.get('nome', ''), _cnpj(e.get('cnpj')), '/'.join(reversed((res.get('competencia') or '').split('-'))))])
+        ws['A2'].font = Font(color='5B6478'); ws.append([])
+        ws.append([c[0] for c in colunas])
+        for i, c in enumerate(colunas, start=1):
+            cel = ws.cell(row=ws.max_row, column=i)
+            cel.font = Font(bold=True, color='FFFFFF'); cel.fill = PatternFill('solid', fgColor=NAVY)
+            cel.alignment = Alignment(horizontal='right' if c[1] == 'brl' else 'left')
+            ws.column_dimensions[get_column_letter(i)].width = c[2]
+        for l in linhas + ([total] if total else []):
+            ws.append(l)
+            for i, c in enumerate(colunas, start=1):
+                if c[1] == 'brl':
+                    ws.cell(row=ws.max_row, column=i).number_format = '#,##0.00'
+        if total:
+            for i in range(1, len(colunas) + 1):
+                ws.cell(row=ws.max_row, column=i).font = Font(bold=True, color=NAVY)
+        ws.freeze_panes = 'A5'
+
+    ws = wb.active; ws.title = 'Resumo'
+    r = [('Débito do mês', t['pis_debito'], t['cofins_debito']), ('(-) Créditos do mês', t['pis_credito'], t['cofins_credito']),
+         ('(-) Saldo credor anterior', t['pis_saldo_anterior'], t['cofins_saldo_anterior']), ('(-) Retenções na fonte', t['pis_retido'], t['cofins_retido']),
+         ('Ajustes de débito (já no débito)', t['pis_ajuste_debito'], t['cofins_ajuste_debito']), ('Ajustes de crédito (já no crédito)', t['pis_ajuste_credito'], t['cofins_ajuste_credito']),
+         ('= A recolher', t['pis_recolher'], t['cofins_recolher']), ('Saldo credor para o mês seguinte', t['pis_saldo_credor'], t['cofins_saldo_credor'])]
+    aba(ws, 'Apuração de PIS/COFINS não cumulativo', [('', 'txt', 40), ('PIS', 'brl', 16), ('COFINS', 'brl', 16)], [list(x) for x in r])
+    ws.append([]); ws.append(['Total a recolher (PIS + COFINS)', t['total_recolher']]); ws.cell(row=ws.max_row, column=2).number_format = '#,##0.00'
+    ws.cell(row=ws.max_row, column=1).font = Font(bold=True, color=NAVY)
+    for a in pc.get('alertas') or []:
+        ws.append([a]); ws.cell(row=ws.max_row, column=1).font = Font(italic=True, color='B42318')
+    if pc.get('a_classificar'):
+        ws.append(['%d item(ns) "A classificar" sem crédito até alguém decidir.' % pc['a_classificar']]); ws.cell(row=ws.max_row, column=1).font = Font(italic=True, color='B42318')
+    d = pc['debitos']
+    aba(wb.create_sheet('Débitos'), 'Débitos por natureza', [('Natureza', 'txt', 44), ('Itens', 'int', 8), ('Valor', 'brl', 16), ('Base', 'brl', 16), ('PIS', 'brl', 14),
+        ('COFINS', 'brl', 14), ('PIS no XML', 'brl', 14), ('COFINS no XML', 'brl', 14), ('Fundamento', 'txt', 60)],
+        [[g['natureza'], g['itens'], g['valor'], g['base'], g['pis'], g['cofins'], g['pis_xml'], g['cofins_xml'], g['motivo']] for g in d],
+        ['Total', sum(g['itens'] for g in d), round(sum(g['valor'] for g in d), 2), round(sum(g['base'] for g in d), 2), round(sum(g['pis'] for g in d), 2),
+         round(sum(g['cofins'] for g in d), 2), round(sum(g['pis_xml'] for g in d), 2), round(sum(g['cofins_xml'] for g in d), 2), ''])
+    c = pc['creditos']
+    aba(wb.create_sheet('Créditos'), 'Créditos por natureza', [('Natureza', 'txt', 44), ('Situação', 'txt', 13), ('Itens', 'int', 8), ('Valor', 'brl', 16), ('Base', 'brl', 16),
+        ('PIS', 'brl', 14), ('COFINS', 'brl', 14), ('Fundamento', 'txt', 70)],
+        [[g['natureza'], g['situacao'], g['itens'], g['valor'], g['base'], g['pis'], g['cofins'], g['motivo']] for g in c],
+        ['Total', '', sum(g['itens'] for g in c), round(sum(g['valor'] for g in c), 2), round(sum(g['base'] for g in c), 2), round(sum(g['pis'] for g in c), 2),
+         round(sum(g['cofins'] for g in c), 2), ''])
+    aba(wb.create_sheet('Itens'), 'Detalhe item a item', [('Lado', 'txt', 9), ('Documento', 'txt', 14), ('Data', 'txt', 11), ('Participante', 'txt', 34), ('Produto/serviço', 'txt', 40),
+        ('NCM', 'txt', 10), ('CFOP', 'txt', 6), ('Valor', 'brl', 14), ('Natureza', 'txt', 34), ('Situação', 'txt', 12), ('Base', 'brl', 14), ('PIS', 'brl', 12),
+        ('COFINS', 'brl', 12), ('Origem', 'txt', 10), ('Fundamento', 'txt', 60), ('Chave', 'txt', 46)],
+        [[l['lado'], l['doc'], '/'.join(reversed((l.get('data') or '').split('-'))), l.get('part'), l.get('produto'), l.get('NCM') or '', l.get('CFOP') or '',
+          l.get('valor'), l['natureza'], l['situacao'], l['base'], l['pis'], l['cofins'], l.get('origem') or '', l.get('motivo') or '', l.get('chave') or ''] for l in pc['linhas']])
+    buf = io.BytesIO(); wb.save(buf)
+    return buf.getvalue()

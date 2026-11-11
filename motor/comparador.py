@@ -6,7 +6,7 @@ Fluxo: carregar documentos por card -> identificar a empresa -> ler a planilha -
 (CFOP/CST) -> presença (não lançada, sem XML, só no PDF, duplicada, cancelada)."""
 import os, re, datetime
 from collections import Counter, defaultdict
-from . import xml_docs, planilha, pdf_docs, destino, devolucoes, consolidar, apuracao, painel
+from . import xml_docs, planilha, pdf_docs, destino, devolucoes, consolidar, apuracao, painel, piscofins
 from .util import num, digitos, numero_doc, raiz, igual, data_iso, brl, TOL, norm
 from .regras_base import (sufixos_entrada_aceitos, cfop_entrada_esperado, desc_cfop, CST_ENTRADA, CSOSN, CST_COM_ST, CST_DESC, USO_CONSUMO, ATIVO,
                           REVENDA_INDUSTRIA, COM_ST, FRETE, COMBUSTIVEL_CONSUMO, COMPRAS, PC_CREDITO, PC_SEM_CREDITO, PC_FORN_SEM_CREDITO, ALIQ_PIS_NC, ALIQ_COFINS_NC)
@@ -1207,7 +1207,7 @@ def regras_nfse(n, d, L, ctx):
 
 # --------------------------------------------------------------------------------------------- execução
 
-def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None, historico=None):
+def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None, historico=None, pis_cofins=None):
     t0 = datetime.datetime.now()
     docs_raw, eventos, pdfs, erros, inventario = carregar(sessao)
     cancelados = {e['chave'] for e in eventos if e.get('cancelamento')}
@@ -1470,6 +1470,10 @@ def executar(sessao, cnpj_inf='', competencia_inf='', ajustes=None, historico=No
     r['pendentes_anteriores'] = _pendentes_anteriores(lancs, anterior)
     # ICMS/IPI só existem com NF-e/CT-e (produto e frete); prestadora de serviço só tem NFS-e
     r['tem_icms'] = any(d['tipo'] in ('nfe', 'cte') for d in docs) or any((L.get('mov_hint') in ('entrada', 'saida', 'frete')) for L in lancs)
+    # apuração de PIS/COFINS (Lucro Real não cumulativo), só para as empresas ligadas no portal
+    if pis_cofins and pis_cofins['ativo'](emp.get('cnpj')):
+        r['piscofins'] = piscofins.apurar(docs, emp, competencia, serv_rel, piscofins.ler_memoria(pis_cofins['memoria']),
+                                          pis_cofins['cfg'](emp.get('cnpj'), competencia))
     return r
 
 
