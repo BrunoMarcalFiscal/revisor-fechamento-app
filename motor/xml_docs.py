@@ -142,6 +142,7 @@ def _cte(root, caminho):
         'icms': {'grupo': icms.tag if icms is not None else '', 'CST': _t(icms, 'CST'), 'vBC': _n(icms, 'vBC'), 'pICMS': _n(icms, 'pICMS'), 'vICMS': _n(icms, 'vICMS'), 'pRedBC': _n(icms, 'pRedBC'),
                  'vBCOutraUF': _n(icms, 'vBCOutraUF'), 'pICMSOutraUF': _n(icms, 'pICMSOutraUF'), 'vICMSOutraUF': _n(icms, 'vICMSOutraUF')} if icms is not None else {},
         'nfes': [(_t(x, 'chave') or '') for x in inf.findall('.//infNFe')],
+        'ref': _t(inf, 'infCteComp/chCTe') or _t(inf, 'infCteComp/chCte') or _t(inf, 'infCteSub/chCte') or _t(inf, 'infCteSub/chCTe'),
         'vCarga': _n(inf, './/infCarga/vCarga'),
         'protocolo': _t(root, './/protCTe/infProt/cStat'),
     }

@@ -290,22 +290,27 @@ def apurar(docs, emp, competencia, serv_rel=None, memoria=None, cfg=None):
             linhas.append(ln)
         frac_compra[d['chave']] = (cb / ct) if ct else 0.0
 
-    # ---- CT-e (a empresa é a tomadora)
-    fv, fc = mem.get('frac_venda') or {}, mem.get('frac_compra') or {}
-    for d in docs:
-        if d['tipo'] != 'cte' or d['cancelada'] or _raiz(d['raw']['tomador_cnpj']) != rz or d['raw'].get('tpCTe') == '2':
-            continue
+    # ---- CT-e (a empresa é a tomadora); o complementar (tpCTe 1) segue a fração do CT-e que ele complementa
+    fv, fc, fct = mem.get('frac_venda') or {}, mem.get('frac_compra') or {}, mem.get('frac_cte') or {}
+    frac_cte = {}
+    ctes = sorted([d for d in docs if d['tipo'] == 'cte' and not d['cancelada'] and _raiz(d['raw']['tomador_cnpj']) == rz and d['raw'].get('tpCTe') != '2'],
+                  key=lambda d: d['raw'].get('tpCTe') == '1')
+    for d in ctes:
         x = d['raw']
         venda = _raiz(x['rem']['cnpj']) == rz
         nat = 'Frete na venda' if venda else 'Frete na compra'
         # NF-e de outro mês: fração guardada na memória quando aquele mês foi apurado
         fr = [frac_venda.get(k, fv.get(k)) if venda else frac_compra.get(k, fc.get(k)) for k in x['nfes']]
         fr = [v for v in fr if v is not None]
+        if not fr and x.get('ref'):
+            v = frac_cte.get(x['ref'], fct.get(x['ref']))
+            fr = [v] if v is not None else []
         liq = x['vTPrest'] - (x.get('icms') or {}).get('vICMS', 0)
         if not fr:
             linhas.append(_lin_cte(d, nat, 'Verificar', 0, 0, 0, 'NF-e transportada não está nas %s enviadas: confirmar' % ('saídas' if venda else 'entradas')))
             continue
         f = sum(fr) / len(fr)
+        frac_cte[d['chave']] = f
         b = liq * f
         mot = ('Frete na venda (art. 3º, IX): crédito na parte que gerou débito' if venda else 'Frete na compra: segue a mercadoria transportada') + \
               ' (fração %d%%)' % round(f * 100)
@@ -342,7 +347,8 @@ def apurar(docs, emp, competencia, serv_rel=None, memoria=None, cfg=None):
     pc = {'competencia': competencia, 'fabricante': fabricante, 'linhas': linhas,
           'fora_mes': [{'doc': '%s %s' % ('NF-e' if d['tipo'] == 'nfe' else 'CT-e', d['numero']), 'data': d['emissao'], 'part': d['part_nome'], 'valor': d['valor']} for d in fora_mes], 'retencoes': {k: _r(v) for k, v in ret.items()},
           'opcoes_entrada': list(OPCOES_ENTRADA), 'opcoes_servico': list(OPCOES_SERVICO),
-          '_frac': {'frac_venda': {k: round(v, 6) for k, v in frac_venda.items()}, 'frac_compra': {k: round(v, 6) for k, v in frac_compra.items()}}}
+          '_frac': {'frac_venda': {k: round(v, 6) for k, v in frac_venda.items()}, 'frac_compra': {k: round(v, 6) for k, v in frac_compra.items()},
+                   'frac_cte': {k: round(v, 6) for k, v in frac_cte.items()}}}
     return totalizar(pc, cfg)
 
 
