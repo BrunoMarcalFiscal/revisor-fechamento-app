@@ -52,7 +52,11 @@ OPCOES_ENTRADA = {
     'Revenda - tributada': ('sim', 'Mercadoria para revenda fora do monofásico (art. 3º, I)', False),
     'Revenda - monofásico': ('nao', 'Revenda de monofásico (Lei 10.147/00): vedado (art. 3º, I, b; STJ Tema 1093)', False),
     'Ativo imobilizado - produção': ('sim', 'Máquina da produção: crédito imediato (Lei 12.546/11, art. 4º)', True),
+    'Embalagem de transporte/expedição': ('sim', 'Tese aplicada por decisão do escritório: embalagem de transporte do produto acabado (a RFB não aceita como insumo)', False),
+    'Uso e consumo - limpeza/higiene': ('sim', 'Tese aplicada por decisão do escritório: limpeza/sanitização exigida pela vigilância sanitária', False),
     'Uso e consumo': ('nao', 'Material de uso e consumo: sem crédito', False),
+    'Uso e consumo - uniforme': ('nao', 'Uniforme comum: não é insumo', False),
+    'Uso e consumo - manutenção predial': ('nao', 'Manutenção predial/ferramentas: não é insumo', False),
     'Uso e consumo - refeição': ('nao', 'Alimentação de empregados: não é insumo (PN 5/2018)', False),
     'Remessa/retorno/outras': ('nao', 'Remessa/retorno/outra entrada: não é aquisição', False),
 }
@@ -211,6 +215,10 @@ def _memoria_item(mem, emit, it):
 def apurar(docs, emp, competencia, serv_rel=None, memoria=None, cfg=None):
     rz = emp.get('raiz') or _raiz(emp.get('cnpj'))
     mem = (memoria or {}).get(rz) or {}
+    # só os documentos do mês: o de outro mês já foi (ou será) apurado no fechamento dele
+    fora_mes = [d for d in docs if competencia and d['tipo'] in ('nfe', 'cte') and (d.get('emissao') or '')[:7] != competencia
+                and d['empresa_envolvida'] and not d['cancelada']]
+    docs = [d for d in docs if d not in fora_mes]
     nfe = [d for d in docs if d['tipo'] == 'nfe' and not d['cancelada'] and not d.get('denegada') and d['empresa_envolvida']]
     saidas = [d for d in nfe if d['propria'] and d['raw']['tpNF'] == '1']
     # fabricante = vende produção própria (CFOP x101/x401...) de produto monofásico
@@ -331,7 +339,8 @@ def apurar(docs, emp, competencia, serv_rel=None, memoria=None, cfg=None):
                        'prestador': x['prestador']['cnpj'], 'produto': (x.get('xDescServ') or '')[:80], 'valor': _r(x['vServ']), 'natureza': nat,
                        'situacao': sit, 'codigo_bc': cod, 'motivo': mot, 'origem': origem, 'competencia': (x.get('competencia') or '')[:7],
                        'base': 0.0, 'pis': 0.0, 'cofins': 0.0})
-    pc = {'competencia': competencia, 'fabricante': fabricante, 'linhas': linhas, 'retencoes': {k: _r(v) for k, v in ret.items()},
+    pc = {'competencia': competencia, 'fabricante': fabricante, 'linhas': linhas,
+          'fora_mes': [{'doc': '%s %s' % ('NF-e' if d['tipo'] == 'nfe' else 'CT-e', d['numero']), 'data': d['emissao'], 'part': d['part_nome'], 'valor': d['valor']} for d in fora_mes], 'retencoes': {k: _r(v) for k, v in ret.items()},
           'opcoes_entrada': list(OPCOES_ENTRADA), 'opcoes_servico': list(OPCOES_SERVICO),
           '_frac': {'frac_venda': {k: round(v, 6) for k, v in frac_venda.items()}, 'frac_compra': {k: round(v, 6) for k, v in frac_compra.items()}}}
     return totalizar(pc, cfg)
@@ -394,6 +403,9 @@ def totalizar(pc, cfg=None):
     if fora:
         alertas.append('%d NFS-e tomada(s) com competência diferente de %s (%s): o crédito entrou neste mês; confirme se é extemporâneo.'
                        % (len(fora), pc['competencia'], ', '.join(sorted({l['doc'] for l in fora})[:6])))
+    if pc.get('fora_mes'):
+        alertas.append('%d documento(s) de outro mês ficaram fora desta apuração: %s.' % (len(pc['fora_mes']), ', '.join('%s (%s)' % (x['doc'], '/'.join(reversed(x['data'].split('-'))))
+                                                                                           for x in pc['fora_mes'][:8])))
     pend = [l for l in L if l['situacao'] == 'Verificar' and l['lado'] in ('entrada', 'tomado')]
     cte_sem = [l for l in L if l['situacao'] == 'Verificar' and l['lado'] == 'frete']
     if cte_sem:
