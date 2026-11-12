@@ -102,7 +102,7 @@ def montar(res, k, apu=None):
         a.c(d0 + '2', t, st='tit'); a.m('%s2:%s2' % (d0, c0))
         a.c(d0 + '3', tit2, st='sub'); a.m('%s3:%s3' % (d0, c0))
         a.c(d0 + '5', 'DESCRIÇÃO', st='cab'); a.c(b0 + '5', 'BASE', st='cab'); a.c(p0 + '5', pp, st='cab'); a.c(c0 + '5', pc, st='cab')
-        a.c(d0 + '6', 'CRÉDITOS', st='sub'); a.m('%s6:%s6' % (d0, c0))
+        a.c(d0 + '6', 'CRÉDITOS' if d0 == 'G' else 'CRÉDITOS (regime cumulativo: sem crédito)', st='sub'); a.m('%s6:%s6' % (d0, c0))
         a.c(d0 + '13', 'DÉBITOS', st='sub'); a.m('%s13:%s13' % (d0, c0))
         a.c(d0 + '20', 'APURAÇÃO', st='sub'); a.m('%s20:%s20' % (d0, c0))
     # ---------------- créditos (Matriz)
@@ -114,14 +114,19 @@ def montar(res, k, apu=None):
         a.c('G9', 'Importação (9,25% sobre o valor)'); a.c('H9', _r(imp_base), fmt='num', ed='imp_base_manual')
         a.c('I9', _r(imp_base * 0.0165), '=H9*1.65%', fmt='num'); a.c('J9', _r(imp_base * 0.076), '=H9*7.6%', fmt='num')
     else:
-        a.c('G9', 'Importação: PIS/COFINS pago (%s)' % org); a.c('H9', None, fmt='num')
+        a.c('G9', 'Importação: PIS/COFINS pago (%s)' % org); a.m('G9:H9')
         a.c('I9', imp_pp, fmt='num', ed='imp_pis_manual'); a.c('J9', imp_cp, fmt='num', ed='imp_cof_manual')
-    a.c('G10', 'Outros créditos'); a.c('H10', None, fmt='num'); a.c('I10', extra_pis, fmt='num'); a.c('J10', extra_cof, fmt='num')
+    a.c('G10', 'Outros créditos'); a.m('G10:H10'); a.c('I10', extra_pis, fmt='num'); a.c('J10', extra_cof, fmt='num')
     a.c('G11', 'TOTAL DE CRÉDITOS', st='clr'); a.c('H11', base_cred, '=SUM(H7:H10)', st='clr')
     a.c('I11', _r(mp['cred_periodo']), '=H11*1.65%' + ('' if imp_base else '+I9') + '+I10', st='clr')
     a.c('J11', _r(mc['cred_periodo']), '=H11*7.6%' + ('' if imp_base else '+J9') + '+J10', st='clr')
     # créditos (SCP): cumulativo
-    a.c('B7', 'Regime cumulativo: sem crédito', st='nota'); a.m('B7:E7')
+    for r, rot in ((7, 'Entradas de produtos'), (8, 'Serviços tomados de PJ'), (9, 'Importação'), (10, 'Outros créditos')):
+        a.c('B%d' % r, rot); a.c('D%d' % r, 0, fmt='num'); a.c('E%d' % r, 0, fmt='num')
+        if r < 9:
+            a.c('C%d' % r, 0, fmt='num')
+        else:
+            a.m('B%d:C%d' % (r, r))
     a.c('B11', 'TOTAL DE CRÉDITOS', st='clr'); a.c('C11', 0, st='clr'); a.c('D11', 0, st='clr'); a.c('E11', 0, st='clr')
     # ---------------- débitos
     lin_d = [(14, 'Prestação de serviços', d['serv_scp'], '@serv_scp', d['serv_matriz'], '@serv_matriz'),
@@ -143,17 +148,21 @@ def montar(res, k, apu=None):
             ('B', 'C', 'D', 'E', (0, 0), (0, 0), (ret_s['pis'], ret_s['cofins']), (None, None), ('ret_s_pis', 'ret_s_cofins'), (sp['pis_rec'], sp['cofins_rec']), None),
             ('G', 'H', 'I', 'J', (mp['cred_periodo'], mc['cred_periodo']), (mp['saldo_ant'], mc['saldo_ant']), (ret_m['pis'], ret_m['cofins']), ('saldo_pis_ant', 'saldo_cof_ant'),
              ('ret_m_pis', 'ret_m_cofins'), (mp['a_recolher'], mc['a_recolher']), (mp['saldo_credor_final'], mc['saldo_credor_final']))):
-        a.c(d0 + '21', 'Débitos do mês'); a.c(p0 + '21', a.cel[p0 + '18']['v'], '=%s18' % p0, fmt='num'); a.c(c0 + '21', a.cel[c0 + '18']['v'], '=%s18' % c0, fmt='num')
-        a.c(d0 + '22', '(−) Créditos do mês'); a.c(p0 + '22', _r(cre[0]), '=%s11' % p0, fmt='num'); a.c(c0 + '22', _r(cre[1]), '=%s11' % c0, fmt='num')
-        a.c(d0 + '23', '(−) Saldo credor do mês anterior'); a.c(p0 + '23', _r(sal[0]), fmt='num', ed=eds[0]); a.c(c0 + '23', _r(sal[1]), fmt='num', ed=eds[1])
-        a.c(d0 + '24', '(−) Retido nas notas'); a.c(p0 + '24', _r(ret[0]), fmt='num', ed=edr[0]); a.c(c0 + '24', _r(ret[1]), fmt='num', ed=edr[1])
-        a.c(d0 + '25', 'A RECOLHER', st='pag'); a.c(b0 + '25', None, st='pag')
+        darf = 'DARF PIS 8109 · COFINS 2172' if d0 == 'B' else 'DARF PIS 6912 · COFINS 5856'
+        linhas_ap = (('21', 'Débitos do mês', (a.cel[p0 + '18']['v'], '=%s18' % p0, None), (a.cel[c0 + '18']['v'], '=%s18' % c0, None)),
+                     ('22', '(−) Créditos do mês', (_r(cre[0]), '=%s11' % p0, None), (_r(cre[1]), '=%s11' % c0, None)),
+                     ('23', '(−) Saldo credor do mês anterior', (_r(sal[0]), None, eds[0]), (_r(sal[1]), None, eds[1])),
+                     ('24', '(−) Retido nas notas', (_r(ret[0]), None, edr[0]), (_r(ret[1]), None, edr[1])))
+        for r, rot, vp, vc in linhas_ap:
+            a.c(d0 + r, rot); a.m('%s%s:%s%s' % (d0, r, b0, r))
+            a.c(p0 + r, vp[0], vp[1], fmt='num', ed=vp[2]); a.c(c0 + r, vc[0], vc[1], fmt='num', ed=vc[2])
+        a.c(d0 + '25', 'A RECOLHER  (%s)' % darf, st='pag'); a.m('%s25:%s25' % (d0, b0))
         a.c(p0 + '25', rec[0], '=MAX(%s21-%s22-%s23-%s24,0)' % ((p0,) * 4), st='pag'); a.c(c0 + '25', rec[1], '=MAX(%s21-%s22-%s23-%s24,0)' % ((c0,) * 4), st='pag')
-        if scf:
-            a.c(d0 + '26', 'Saldo credor para o próximo mês'); a.c(p0 + '26', scf[0], '=MAX(%s22+%s23-%s21,0)' % ((p0,) * 3), fmt='num'); a.c(c0 + '26', scf[1], '=MAX(%s22+%s23-%s21,0)' % ((c0,) * 3), fmt='num')
+        scf = scf or (0, 0)
+        a.c(d0 + '26', 'Saldo credor para o próximo mês'); a.m('%s26:%s26' % (d0, b0))
+        a.c(p0 + '26', scf[0], '=MAX(%s22+%s23-%s21,0)' % ((p0,) * 3), fmt='num'); a.c(c0 + '26', scf[1], '=MAX(%s22+%s23-%s21,0)' % ((c0,) * 3), fmt='num')
         a.c(d0 + '28', 'TOTAL PIS + COFINS A RECOLHER', st='totg'); a.m('%s28:%s28' % (d0, p0))
         a.c(c0 + '28', _r(rec[0] + rec[1]), '=%s25+%s25' % (p0, c0), st='totg')
-    a.c('B26', 'DARF: PIS 8109 · COFINS 2172', st='cod', fmt='txt')
     # faturamento e proporção (L:O)
     a.c('L2', 'Locação'); a.c('M2', d['loc_total'], fmt='brl', ed='loc_manual')
     a.c('L3', 'Prestação '); a.c('M3', d['serv_total'], fmt='brl', ed='serv_manual')

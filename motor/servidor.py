@@ -555,7 +555,8 @@ class H(BaseHTTPRequestHandler):
                     json.dump({**_json(alvo, {}), **v}, open(alvo, 'w', encoding='utf-8'), ensure_ascii=False)
             ativo = False
             # ativar=1: a cliente já abre neste mês, salvo se estiver num mês mais novo
-            if q.get('ativar') and (not atual_id or atual_id == fid or atual_id.split('_')[-1] <= fid.split('_')[-1]):
+            # o fechamento recarregado é o que está aberto: troca também a sessão aberta (senão ela grava a versão antiga por cima ao trocar de mês)
+            if atual_id == fid or (q.get('ativar') and (not atual_id or atual_id.split('_')[-1] <= fid.split('_')[-1])):
                 if atual_id and atual_id != fid:
                     arquivar()
                 shutil.rmtree(SESSAO, ignore_errors=True)
