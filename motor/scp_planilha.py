@@ -263,6 +263,9 @@ def montar(res, k, apu=None):
     icms_rec = _r(max(apc.get('saldo', 0) or 0, 0)) if apc else _r(max((k.get('icms_saldo') or 0), 0))
     ipi_rec = _r(max(apc.get('ipiSaldo', 0) or 0, 0)) if apc else 0
     iss_m = k.get('iss', 0)
+    rec_fora = _r((apc or {}).get('oc') or 0) if c.get('recuperacao_fora_exito') and apc else 0
+    if rec_fora:
+        icms_rec = _r(max((apc.get('saldo', 0) or 0) + rec_fora, 0))  # recuperação de crédito (outros créditos) não conta como economia
     if c.get('icms_manual') is not None:
         icms_rec = c['icms_manual']
     if c.get('ipi_manual') is not None:
@@ -315,6 +318,8 @@ def montar(res, k, apu=None):
     a.c('A25', '% honorário de êxito'); a.c('B25', pct_ex, fmt='pct', ed='@exito_pct')
     a.c('A26', 'HONORÁRIO DE ÊXITO', st='totg'); a.c('B26', _r(max(carga_comp - carga_est, 0) * pct_ex), '=MAX(B24,0)*B25', st='totg', fmt='brl')
     base_exp = _r(sum(x['base'] for x in k.get('linhas_exportacao') or []))
+    if rec_fora and c.get('icms_manual') is None:
+        a.c('A29', 'ICMS sem a recuperação de crédito de R$ %s (outros créditos da apuração): ela fica fora do êxito, combinado com o cliente.' % _b(rec_fora))
     if base_exp:
         a.c('A28', 'Exportação fora do faturamento: base do êxito combinada com o cliente. Exportação do mês: R$ %s (ver aba Economia com Exportação).' % _b(base_exp))
     abas.append(a)

@@ -298,7 +298,7 @@ def calcular_scp(res, cfg_novo=None):
         ant = _json(os.path.join(HIST, '%s_%s' % (cnpj0, _comp_ant(comp0)), 'sessao', 'scp.json'), {})
         for kk, v in (ant.get('cfg') or {}).items():
             if kk in ('scp_cnpj', 'scp_nome', 'matriz_nome', 'creditos_cfop', 'excluir_ipi_credito', 'excluir_ipi_debito', 'excluir_st_debito', 'deduzir_devolucoes', 'importacao',
-                      'excluir_pf', 'prioridade', 'modo', 'compensa', 'ant_carga_pct', 'retidas_scp', 'exito_pct', 'ant_carga_fixa') or kk.startswith('ant_'):
+                      'excluir_pf', 'prioridade', 'modo', 'compensa', 'ant_carga_pct', 'retidas_scp', 'exito_pct', 'ant_carga_fixa', 'recuperacao_fora_exito') or kk.startswith('ant_'):
                 cfg[kk] = v
     if cfg_novo is not None:
         cfg.update(cfg_novo)
