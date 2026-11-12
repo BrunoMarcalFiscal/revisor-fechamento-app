@@ -333,8 +333,8 @@ def montar(res, k, apu=None):
         e.c('B21', cc_e, '=B19*B20', fmt='brl', b=True)
         e.c('B23', carga_est / fat_e if fat_e else 0, '=IF(B19=0,0,B22/B19)', fmt='pct')
         e.c('B24', _r(cc_e - carga_est), '=B21-B22', st='pag', fmt='brl')
-        e.c('A25', 'Exportação incluída'); e.c('B25', base_exp, fmt='brl')
-        e.c('A26', 'Sem honorário de êxito: combinado que a exportação não entra (ver aba Economia).', st='lin'); e.c('B26', None, fmt='num')
+        e.c('G16', 'Exportação incluída', b=True); e.c('H16', base_exp, fmt='brl', b=True)
+        e.c('A26', 'ÊXITO SE A EXPORTAÇÃO ENTRASSE', st='totg'); e.c('B26', _r(max(cc_e - carga_est, 0) * pct_ex), '=MAX(B24,0)*B25', st='totg', fmt='brl')
         e.cel.pop('A28', None)
         abas.append(e)
 
