@@ -3,6 +3,7 @@
 cálculo da Estratégia SCP. O mesmo modelo vira a tela (HTML) e o Excel (openpyxl, com fórmulas nas mesmas células).
 
 Cada célula: {'v': valor calculado, 'f': fórmula do Excel (opcional), 'st': estilo, 'fmt': formato}."""
+import copy
 import io
 import re
 from .regras_base import desc_cfop
@@ -99,10 +100,18 @@ def montar(res, k, apu=None):
     a.c('E10', 'Saldo Credor COFINS 7,60%'); a.c('F10', _r(mc['saldo_ant']), ed='saldo_cof_ant')
     extra_pis = _r(mp['cred_periodo'] - (base_cred_prod + base_tom + alug + imp_base) * 0.0165)
     extra_cof = _r(mc['cred_periodo'] - (base_cred_prod + base_tom + alug + imp_base) * 0.076)
+    # importação pelo valor pago (DI/DUIMP ou NF-e): linha própria, somada ao crédito do período (Lei 10.865/04, art. 15)
+    imp_pp, imp_cp = (_r(imp.get('pis') or 0), _r(imp.get('cofins') or 0)) if imp.get('modo') in ('pago', 'manual') else (0, 0)
+    ref_p = ref_c = ''
+    if imp_pp or imp_cp:
+        org = 'DI/DUIMP' if imp.get('modo') == 'manual' else 'NF-e de importação'
+        a.c('E8', 'PIS-Importação pago (%s)' % org); a.c('F8', imp_pp, fmt='num', ed='imp_pis_manual')
+        a.c('E13', 'COFINS-Importação pago (%s)' % org); a.c('F13', imp_cp, fmt='num', ed='imp_cof_manual')
+        extra_pis = _r(extra_pis - imp_pp); extra_cof = _r(extra_cof - imp_cp); ref_p, ref_c = '+F8', '+F13'
     a.c('B11', 'PIS 0,65%', st='clr'); a.c('C11', 0, '=C7*1.65%', st='clr')
-    a.c('E11', 'PIS 0 1,65%', st='clr'); a.c('F11', _r(mp['cred_periodo']), '=F7*1.65%' + ('+%s' % extra_pis if abs(extra_pis) > 0.004 else ''), st='clr')
+    a.c('E11', 'PIS 0 1,65%', st='clr'); a.c('F11', _r(mp['cred_periodo']), '=F7*1.65%' + ref_p + ('+%s' % extra_pis if abs(extra_pis) > 0.004 else ''), st='clr')
     a.c('B12', 'COFINS 3%', st='clr'); a.c('C12', 0, '=C7*7.6%', st='clr')
-    a.c('E12', 'COFINS 7,60%', st='clr'); a.c('F12', _r(mc['cred_periodo']), '=F7*7.6%' + ('+%s' % extra_cof if abs(extra_cof) > 0.004 else ''), st='clr')
+    a.c('E12', 'COFINS 7,60%', st='clr'); a.c('F12', _r(mc['cred_periodo']), '=F7*7.6%' + ref_c + ('+%s' % extra_cof if abs(extra_cof) > 0.004 else ''), st='clr')
     a.c('B14', 'Prestação de serviços'); a.c('C14', d['serv_scp'], ed='@serv_scp')
     a.c('E14', 'Prestação de serviços'); a.c('F14', d['serv_matriz'], ed='@serv_matriz')
     a.c('B15', 'Locação '); a.c('C15', d['loc_scp'], ed='@loc_scp')
@@ -234,9 +243,10 @@ def montar(res, k, apu=None):
         a.c('A%d' % (5 + i), rot)
         a.c('B%d' % (5 + i), 0 if kk == 'adic' else (ant[kk] or 0), fmt='brl', ed=None if kk == 'adic' else 'ant_' + kk)
     carga_ant = sum(ant[kk] or 0 for kk in ('pis', 'cofins', 'irpj', 'csll', 'ipi', 'iss', 'icms'))
-    pct_ant = (carga_ant / ant['faturamento']) if ant['faturamento'] else (c.get('ant_carga_pct') or 21.69) / 100
+    fixa = bool(c.get('ant_carga_fixa'))  # carga combinada com o cliente (AGVS: 21,69%): não recalcula pelos impostos do regime anterior
+    pct_ant = (c.get('ant_carga_pct') or 21.69) / 100 if fixa or not ant['faturamento'] else carga_ant / ant['faturamento']
     a.c('A14', 'CARGA TRIBUTÁRIA', st='pag'); a.c('B14', _r(carga_ant), '=SUM(B5:B12)', st='pag', fmt='brl')
-    a.c('A15', '%', st='pag'); a.c('B15', pct_ant, '=IF(B3=0,%s,B14/B3)' % ((c.get('ant_carga_pct') or 21.69) / 100), st='pag', fmt='pct')
+    a.c('A15', '%', st='pag'); a.c('B15', pct_ant, ('=%s' % pct_ant) if fixa else '=IF(B3=0,%s,B14/B3)' % ((c.get('ant_carga_pct') or 21.69) / 100), st='pag', fmt='pct')
     # SCP (Lucro Presumido)
     m3 = sp['base']; n8 = _r(m3 * 0.32)
     pis_s, cof_s = sp['pis_rec'], sp['cofins_rec']
@@ -304,7 +314,29 @@ def montar(res, k, apu=None):
     pct_ex = (c.get('exito_pct') if c.get('exito_pct') is not None else 15.0) / 100
     a.c('A25', '% honorário de êxito'); a.c('B25', pct_ex, fmt='pct', ed='@exito_pct')
     a.c('A26', 'HONORÁRIO DE ÊXITO', st='totg'); a.c('B26', _r(max(carga_comp - carga_est, 0) * pct_ex), '=MAX(B24,0)*B25', st='totg', fmt='brl')
+    base_exp = _r(sum(x['base'] for x in k.get('linhas_exportacao') or []))
+    if base_exp:
+        a.c('A28', 'Exportação fora do faturamento: base do êxito combinada com o cliente. Exportação do mês: R$ %s (ver aba Economia com Exportação).' % _b(base_exp))
     abas.append(a)
+
+    # ============================================================ Economia com Exportação
+    # mesma estratégia, faturamento da Matriz somando a exportação (CFOP 7xxx); só informativa: o êxito sai da aba Economia
+    if base_exp:
+        e = copy.deepcopy(a); e.nome = 'Economia com Exportação'
+        q3e = _r(q3 + base_exp); fat_e = _r(m3 + q3e)
+        e.c('G3', 'FATURAMENTO + EXPORTAÇÃO', b=True); e.c('H3', q3e, "='Pis.Cofins'!K12+%s" % ('%.2f' % base_exp), fmt='brl', b=True)
+        e.c('K3', q3e, '=H3', fmt='brl', b=True)
+        for col, vcol, cg in (('D', 'E', carga_s), ('G', 'H', carga_m)):
+            e.c('%s15' % vcol, cg / fat_e if fat_e else 0, '=IF(E3+H3=0,0,%s14/(E3+H3))' % vcol, st='pag', fmt='pct')
+        cc_e = _r(fat_e * pct_ant)
+        e.c('B19', fat_e, '=E3+H3', fmt='brl', b=True)
+        e.c('B21', cc_e, '=B19*B20', fmt='brl', b=True)
+        e.c('B23', carga_est / fat_e if fat_e else 0, '=IF(B19=0,0,B22/B19)', fmt='pct')
+        e.c('B24', _r(cc_e - carga_est), '=B21-B22', st='pag', fmt='brl')
+        e.c('A25', 'Exportação incluída'); e.c('B25', base_exp, fmt='brl')
+        e.c('A26', 'Sem honorário de êxito: combinado que a exportação não entra (ver aba Economia).', st='lin'); e.c('B26', None, fmt='num')
+        e.cel.pop('A28', None)
+        abas.append(e)
 
     # ============================================================ Fechamento Trimestral
     # economia mês a mês do trimestre e o somatório (como a aba "Fechamento Geral" da planilha do escritório)

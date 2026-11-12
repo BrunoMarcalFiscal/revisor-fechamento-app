@@ -1848,7 +1848,7 @@ async function desenharSCP() {
     <div class="cfg-ref"><span style="font-size:11px;font-weight:700;color:var(--suave);text-transform:uppercase;letter-spacing:.4px">Matriz compensa (fora do pagamento de fato)</span>
       ${['pis', 'cofins', 'icms', 'ipi', 'iss', 'retencao'].map(kk => `<label class="tg"><input type="checkbox" ${(c.compensa || {})[kk] ? 'checked' : ''} onchange="setSCP({compensa: Object.assign({}, SCPR.cfg.compensa, {${kk}: this.checked})}, true)"> ${kk === 'retencao' ? 'Retenção' : kk.toUpperCase()}</label>`).join('')}</div>
     <div class="cfg-ref"><label>Nome curto da Matriz<input type="text" style="width:160px" value="${esc(c.matriz_nome || '')}" onchange="setSCP({matriz_nome: this.value}, true)"></label></div></div>`;
-  const abasX = [['res', 'Resumo'], ['Pis.Cofins', 'Pis.Cofins'], ['Irpj.Csll', 'Irpj.Csll'], ['Economia', 'Economia'], ['Fechamento Trimestral', 'Fechamento Trimestral'], ...(RES.tem_icms === false ? [] : [['Icms', 'Icms']]), ['par', 'Parâmetros e simulação'], ['mem', 'Memória e alertas']];
+  const abasX = [['res', 'Resumo'], ['Pis.Cofins', 'Pis.Cofins'], ['Irpj.Csll', 'Irpj.Csll'], ['Economia', 'Economia sem exportação (êxito)'], ['Economia com Exportação', 'Economia com exportação'], ['Fechamento Trimestral', 'Fechamento Trimestral'], ...(RES.tem_icms === false ? [] : [['Icms', 'Icms']]), ['par', 'Parâmetros e simulação'], ['mem', 'Memória e alertas']];
   if (RES.tem_icms === false && SCP_ABA === 'Icms') SCP_ABA = 'res';
   const aba = SCP_ABA;
   let corpo = '';
@@ -1861,7 +1861,7 @@ async function desenharSCP() {
   if (!ADM) setTimeout(() => document.querySelectorAll('#secScp .mod-c input, #secScp .mod-c select, #secScp .mod-c .painel button:not(.lnk)').forEach(el => { el.disabled = true; el.title = 'Só o ADM edita'; }), 0);
   const it = ([id, rot]) => `<button class="${aba === id ? 'on' : ''}" onclick="SCP_ABA='${id}';desenharSCP()">${rot}</button>`;
   const so = ids => abasX.filter(x => ids.includes(x[0])).map(it).join('');
-  $('#secScp').innerHTML = bar + `<div class="mod-l"><nav class="mod-nav"><div class="rl-t">Visão</div>${so(['res'])}<div class="rl-t">Planilhas</div>${so(['Pis.Cofins', 'Irpj.Csll', 'Economia', 'Fechamento Trimestral', 'Icms'])}<div class="rl-t">Ajustes</div>${so(['par', 'mem'])}</nav><div class="mod-c">${corpo}</div></div>`;
+  $('#secScp').innerHTML = bar + `<div class="mod-l"><nav class="mod-nav"><div class="rl-t">Visão</div>${so(['res'])}<div class="rl-t">Planilhas</div>${so(['Pis.Cofins', 'Irpj.Csll', 'Economia', 'Economia com Exportação', 'Fechamento Trimestral', 'Icms'])}<div class="rl-t">Ajustes</div>${so(['par', 'mem'])}</nav><div class="mod-c">${corpo}</div></div>`;
   // planilha larga cabe melhor com a lateral: reduz até 85% antes de precisar rolar
   const xl = document.querySelector('#secScp .xl-wrap table.xl');
   if (xl) { const b = xl.parentElement; xl.style.zoom = 1; xl.style.zoom = Math.max(.85, Math.min(1, (b.clientWidth - 26) / xl.offsetWidth)); }
