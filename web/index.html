@@ -1192,7 +1192,7 @@ function apuPadrao(a) {
   return {metodo: 'dentro', aliq: a.aliq_interna, simples_excl: {}, simples_val: {}, difal_excl: {},
     simples_desc: 'Crédito de ICMS do Simples Nacional destacado nas notas de entrada (LC 123/06, art. 23)', simples_cod: a.prefixos.simples,
     difal_desc: 'Diferencial de alíquota de uso e consumo (CFOP 2556)', difal_cod: a.prefixos.difal,
-    est_deb: [], est_cred: [], saldo_icms: a.saldo_anterior && a.saldo_anterior.icms ? brl(a.saldo_anterior.icms) : '',
+    est_deb: [], est_cred: [], outros_cred: [], outros_deb: [], saldo_icms: a.saldo_anterior && a.saldo_anterior.icms ? brl(a.saldo_anterior.icms) : '',
     saldo_ipi: a.saldo_anterior && a.saldo_anterior.ipi ? brl(a.saldo_anterior.ipi) : ''};
 }
 async function carregarApu() {
@@ -1235,17 +1235,20 @@ function calcApu() {
   const sim = a.simples.filter(s => !APU.simples_excl[kSim(s)]).reduce((x, s) => x + (APU.simples_val[kSim(s)] != null ? nnum(APU.simples_val[kSim(s)]) : s.credito), 0);
   const dif = a.difal.filter(d => !APU.difal_excl[kDif(d)]).reduce((x, d) => x + difalLinha(d).difal, 0);
   const ed = APU.est_deb.reduce((x, e) => x + nnum(e.valor), 0), ec = APU.est_cred.reduce((x, e) => x + nnum(e.valor), 0);
+  const oc = (APU.outros_cred || []).reduce((x, e) => x + nnum(e.valor), 0), od = (APU.outros_deb || []).reduce((x, e) => x + nnum(e.valor), 0);
   const deb = t.saida.icms, cred = t.entrada.icms, sant = nnum(APU.saldo_icms);
-  const totDeb = r2(deb + dif + ec), totCred = r2(cred + sim + ed + sant), saldo = r2(totDeb - totCred);
+  const totDeb = r2(deb + dif + od + ec), totCred = r2(cred + sim + oc + ed + sant), saldo = r2(totDeb - totCred);
   const ipiDeb = t.saida.ipi, ipiCred = t.entrada.ipi, ipiAnt = nnum(APU.saldo_ipi), ipiSaldo = r2(ipiDeb - ipiCred - ipiAnt);
   const ajustes = [];
   if (sim) ajustes.push({tipo: 'Outros créditos: crédito do Simples Nacional', descricao: APU.simples_desc, valor: r2(sim), codigo: APU.simples_cod});
   if (dif) ajustes.push({tipo: 'Outros débitos: DIFAL uso e consumo', descricao: APU.difal_desc, valor: r2(dif), codigo: APU.difal_cod});
+  (APU.outros_deb || []).forEach(e => ajustes.push({tipo: 'Outros débitos', descricao: e.descricao, valor: r2(nnum(e.valor)), codigo: e.codigo}));
+  (APU.outros_cred || []).forEach(e => ajustes.push({tipo: 'Outros créditos', descricao: e.descricao, valor: r2(nnum(e.valor)), codigo: e.codigo}));
   APU.est_deb.forEach(e => ajustes.push({tipo: 'Estorno de débito', descricao: e.descricao, valor: r2(nnum(e.valor)), codigo: e.codigo}));
   APU.est_cred.forEach(e => ajustes.push({tipo: 'Estorno de crédito', descricao: e.descricao, valor: r2(nnum(e.valor)), codigo: e.codigo}));
-  return {sim: r2(sim), dif: r2(dif), ed: r2(ed), ec: r2(ec), deb, cred, sant, totDeb, totCred, saldo, ipiDeb, ipiCred, ipiAnt, ipiSaldo, ajustes,
-    resumo: {icms: [['ICMS: débitos por saídas', deb], ['(+) Outros débitos (DIFAL)', r2(dif)], ['(+) Estorno de créditos', r2(ec)], ['= Total de débitos', totDeb],
-                    ['Créditos por entradas', cred], ['(+) Outros créditos (Simples Nacional)', r2(sim)], ['(+) Estorno de débitos', r2(ed)], ['(+) Saldo credor anterior', sant], ['= Total de créditos', totCred],
+  return {sim: r2(sim), dif: r2(dif), oc: r2(oc), od: r2(od), ed: r2(ed), ec: r2(ec), deb, cred, sant, totDeb, totCred, saldo, ipiDeb, ipiCred, ipiAnt, ipiSaldo, ajustes,
+    resumo: {icms: [['ICMS: débitos por saídas', deb], ['(+) Outros débitos (DIFAL)', r2(dif)], ['(+) Outros débitos', r2(od)], ['(+) Estorno de créditos', r2(ec)], ['= Total de débitos', totDeb],
+                    ['Créditos por entradas', cred], ['(+) Outros créditos (Simples Nacional)', r2(sim)], ['(+) Outros créditos', r2(oc)], ['(+) Estorno de débitos', r2(ed)], ['(+) Saldo credor anterior', sant], ['= Total de créditos', totCred],
                     [saldo > 0.005 ? 'ICMS A RECOLHER' : 'SALDO CREDOR DE ICMS A TRANSPORTAR', Math.abs(saldo)]],
              ipi: [['IPI: débitos por saídas', ipiDeb], ['Créditos por entradas', ipiCred], ['(+) Saldo credor anterior', ipiAnt], [ipiSaldo > 0.005 ? 'IPI A RECOLHER' : 'SALDO CREDOR DE IPI', Math.abs(ipiSaldo)]]}};
 }
@@ -1268,6 +1271,10 @@ async function desenharApuracao() {
       <span style="margin-left:auto;display:flex;gap:8px"><button class="btn peq" onclick="togTodos(true)">Abrir todos</button><button class="btn peq" onclick="togTodos(false)">Fechar todos</button></span></div>
     <div style="overflow:auto"><table class="apu"><thead><tr><th>CFOP</th><th></th><th>Valor contábil</th><th>Base ICMS</th><th>Valor ICMS</th><th>Base IPI</th><th>Valor IPI</th><th>Isentas</th><th>Outras</th></tr></thead><tbody>${corpo}</tbody></table></div>
     ${avisos.length ? `<div class="apu-nota">${avisos.map(esc).join(' · ')}</div>` : ''}</div>`;
+  const lv = a.livro_erp, dfs = (lv && lv.diferencas) || [];
+  const livro = `<div class="painel" style="margin-bottom:14px"><div class="ph">Livro fiscal do ERP <small>${lv ? 'as linhas abaixo seguem o livro do ' + esc(lv.fonte) + (lv.tem_ipi ? ' (ICMS e IPI)' : ' (só ICMS; IPI dos XML)') + ' · notas e CST vêm dos XML' : 'Registro de Apuração do ICMS e do IPI por CFOP (PDF do Sankhya): passa a ser a fonte das entradas e saídas de produtos'}</small>
+      <span style="margin-left:auto;display:flex;gap:8px"><label class="btn peq" style="cursor:pointer">Enviar PDF<input type="file" accept=".pdf" multiple style="display:none" onchange="enviarLivroErp(this.files)"></label>${lv ? '<button class="btn peq" onclick="removerLivroErp()">Voltar aos XML</button>' : ''}</span></div>
+    ${lv && dfs.length ? `<div class="apu-nota">Diferença do livro para os XML do lote (livro − XML): ${dfs.map(d => `<b>${esc(d.cfop)}</b> ${brl(d.vc)}${Math.abs(d.icms) > .005 ? ' (ICMS ' + brl(d.icms) + ')' : ''}${Math.abs(d.ipi) > .005 ? ' (IPI ' + brl(d.ipi) + ')' : ''}`).join(' · ')}</div>` : ''}</div>`;
   const cab = (tit, total, sub) => `<div class="ph"><span class="tt">${tit}${sub ? ` <small>${sub}</small>` : ''}</span><span class="val">${rs(total)}</span></div>`;
   const cfg = (desc, cod, extra) => `<div class="cfg">${extra || ''}<label>Descrição<input type="text" class="desc" value="${esc(APU[desc])}" oninput="APU['${desc}']=this.value;salvarApu()"></label>
       <label>Código SPED (E111)<input type="text" class="cod" maxlength="8" value="${esc(APU[cod])}" oninput="APU['${cod}']=this.value.toUpperCase();salvarApu()" title="UF + 0 (ICMS) + tipo do ajuste + 4 dígitos da Tabela 5.1.1 da UF"></label></div>`;
@@ -1285,23 +1292,25 @@ async function desenharApuracao() {
     ${a.difal.length && APU_DET.has('dif') ? `<table><thead><tr><th></th><th>Nota</th><th>Fornecedor</th><th>UF</th><th class="num">Valor</th><th class="num">Alíq. inter.</th><th class="num">ICMS origem</th><th class="num">Base DIFAL</th><th class="num">DIFAL</th><th>Fonte</th></tr></thead><tbody>
     ${a.difal.map(dd => { const k = kDif(dd), ex = !!APU.difal_excl[k], x = difalLinha(dd);
       return `<tr class="${ex ? 'fora' : ''}"><td><input type="checkbox" ${ex ? '' : 'checked'} onchange='APU.difal_excl[${esc(JSON.stringify(k))}]=!this.checked;salvarApu();desenharApuracao()'></td><td><b>${esc(dd.numero)}</b></td><td>${esc(dd.fornecedor)}</td><td>${esc(dd.uf)}</td><td class="num">${brl(dd.valor)}</td><td class="num">${String(dd.aliq_inter).replace('.', ',')}%</td><td class="num">${brl(x.icms)}</td><td class="num">${brl(x.base)}</td><td class="num"><b>${brl(x.difal)}</b></td><td style="color:var(--fraco);font-size:11.5px">${esc(dd.fonte)}</td></tr>`; }).join('')}</tbody></table>` : (a.difal.length ? '' : '<div class="vz">Nenhuma entrada em 2556 na planilha.</div>')}</div>`;
-  const est = (lst, tit, sub, pref, sugs) => `<div class="painel aj">${cab(tit, APU[lst].reduce((x, e) => x + nnum(e.valor), 0), sub)}
+  const est = (lst, tit, sub, pref, sugs) => (APU[lst] = APU[lst] || [], `<div class="painel aj">${cab(tit, APU[lst].reduce((x, e) => x + nnum(e.valor), 0), sub)}
     ${APU[lst].length ? `<table><thead><tr><th class="num">Valor</th><th>Descrição</th><th>Código SPED (E111)</th><th></th></tr></thead><tbody>${APU[lst].map((e, i) => `<tr>
       <td><input class="v" type="text" value="${esc(e.valor)}" onchange="APU['${lst}'][${i}].valor=this.value;salvarApu();desenharApuracao()"></td>
       <td><input class="d" type="text" value="${esc(e.descricao)}" oninput="APU['${lst}'][${i}].descricao=this.value;salvarApu()"></td>
       <td><input class="c" type="text" maxlength="8" value="${esc(e.codigo)}" oninput="APU['${lst}'][${i}].codigo=this.value.toUpperCase();salvarApu()"></td>
       <td><button class="lnk perigo" onclick="APU['${lst}'].splice(${i},1);salvarApu();desenharApuracao()">remover</button></td></tr>`).join('')}</tbody></table>` : '<div class="vz">Nenhum lançamento.</div>'}
     <div style="padding:8px 12px"><button class="btn peq" onclick="APU['${lst}'].push({valor:'', descricao:'', codigo:'${pref}'});salvarApu();desenharApuracao()">+ Adicionar linha</button></div>
-    ${sugs.length ? `<div class="sug"><b style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--alerta)">Sugestões tiradas dos apontamentos</b>${sugs.map(g => `<div class="it"><span>${rs(g.valor)}</span><span>${esc(g.descricao)}</span><span class="m">${esc(g.motivo)}</span><button class="btn peq" onclick='APU[${esc(JSON.stringify(lst))}].push({valor: brl(${g.valor}), descricao: ${esc(JSON.stringify(g.descricao))}, codigo: ${esc(JSON.stringify(pref))}});salvarApu();desenharApuracao()'>+ usar</button></div>`).join('')}</div>` : ''}</div>`;
+    ${sugs.length ? `<div class="sug"><b style="font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--alerta)">Sugestões tiradas dos apontamentos</b>${sugs.map(g => `<div class="it"><span>${rs(g.valor)}</span><span>${esc(g.descricao)}</span><span class="m">${esc(g.motivo)}</span><button class="btn peq" onclick='APU[${esc(JSON.stringify(lst))}].push({valor: brl(${g.valor}), descricao: ${esc(JSON.stringify(g.descricao))}, codigo: ${esc(JSON.stringify(pref))}});salvarApu();desenharApuracao()'>+ usar</button></div>`).join('')}</div>` : ''}</div>`);
   const ajustes = `<div class="tit" style="margin-top:6px">Ajustes da apuração</div>${sim}${dif}
+    ${est('outros_cred', 'Outros créditos', 'reduz o imposto a pagar · ex.: recuperação de crédito', (a.uf || 'PR') + '02', [])}
+    ${est('outros_deb', 'Outros débitos', 'aumenta o imposto a pagar', (a.uf || 'PR') + '00', [])}
     ${est('est_deb', 'Estorno de débito', 'reduz o imposto a pagar', a.prefixos.estorno_debito, a.sugestoes.estorno_debito)}
     ${est('est_cred', 'Estorno de crédito', 'aumenta o imposto a pagar', a.prefixos.estorno_credito, a.sugestoes.estorno_credito)}`;
   const lin = (rot, v, cls) => `<tr class="${cls || ''}"><td>${rot}</td><td class="num">${brl(v)}</td></tr>`;
   const fim = (saldo, rotP, rotC) => `<div class="fim ${saldo > 0.005 ? 'pagar' : 'credor'}"><span class="r">${saldo > 0.005 ? rotP : rotC}</span><span class="v">${rs(Math.abs(saldo))}</span></div>`;
   const resumo = `<div class="tit" style="margin-top:6px">Resumo da apuração</div><div class="res-apu">
     <div class="painel"><div class="ph">ICMS</div><table><tbody>
-      ${lin('Débitos por saídas', c.deb)}${lin('(+) Outros débitos: DIFAL uso e consumo', c.dif, 'sub')}${lin('(+) Estorno de créditos', c.ec, 'sub')}${lin('= Total de débitos', c.totDeb, 'tot')}
-      ${lin('Créditos por entradas', c.cred)}${lin('(+) Outros créditos: Simples Nacional', c.sim, 'sub')}${lin('(+) Estorno de débitos', c.ed, 'sub')}
+      ${lin('Débitos por saídas', c.deb)}${lin('(+) Outros débitos: DIFAL uso e consumo', c.dif, 'sub')}${c.od ? lin('(+) Outros débitos', c.od, 'sub') : ''}${lin('(+) Estorno de créditos', c.ec, 'sub')}${lin('= Total de débitos', c.totDeb, 'tot')}
+      ${lin('Créditos por entradas', c.cred)}${lin('(+) Outros créditos: Simples Nacional', c.sim, 'sub')}${c.oc ? lin('(+) Outros créditos', c.oc, 'sub') : ''}${lin('(+) Estorno de débitos', c.ed, 'sub')}
       <tr class="sub"><td>(+) Saldo credor do período anterior${a.saldo_anterior ? `<div class="sb" style="font-size:11px;color:var(--fraco)">trazido do fechamento de ${esc(a.saldo_anterior.origem)}</div>` : ''}</td><td class="num"><input type="text" value="${esc(APU.saldo_icms)}" placeholder="0,00" onchange="APU.saldo_icms=this.value;salvarApu();desenharApuracao()"></td></tr>
       ${lin('= Total de créditos', c.totCred, 'tot')}</tbody></table>${fim(c.saldo, 'ICMS a recolher', 'Saldo credor para o próximo período')}</div>
     <div class="painel"><div class="ph">IPI</div><table><tbody>
@@ -1315,13 +1324,23 @@ async function desenharApuracao() {
     <div class="kpi ${c.saldo > 0.005 ? 'erro' : 'ok'}"><div class="r">${c.saldo > 0.005 ? 'ICMS a recolher' : 'Saldo credor de ICMS'}</div><div class="v ${c.saldo > 0.005 ? 'pagar' : 'credor'}" style="font-size:20px">${rs(Math.abs(c.saldo))}</div><div class="d">débitos − créditos</div></div>
     <div class="kpi ${c.ipiSaldo > 0.005 ? 'erro' : 'ok'}"><div class="r">${c.ipiSaldo > 0.005 ? 'IPI a recolher' : 'Saldo credor de IPI'}</div><div class="v ${c.ipiSaldo > 0.005 ? 'pagar' : 'credor'}" style="font-size:20px">${rs(Math.abs(c.ipiSaldo))}</div><div class="d">débitos ${rs(c.ipiDeb)} · créditos ${rs(c.ipiCred + c.ipiAnt)}</div></div></div>`;
   const y = window.scrollY;
-  $('#secApu').innerHTML = kp + tabela + ajustes + resumo;
+  $('#secApu').innerHTML = kp + livro + tabela + ajustes + resumo;
   window.scrollTo(0, y);
 }
 const CST_NF_ABERTO = new Set();
 function notasCst(k, ns) {
   const lim = 30, todas = CST_NF_ABERTO.has(k), vis = todas ? ns : ns.slice(0, lim);
   return `<span class="t">${ns.length} nota${ns.length > 1 ? 's' : ''}:</span> ${vis.map(esc).join(', ')}${ns.length > lim ? ` <button class="lnk" onclick='event.stopPropagation();CST_NF_ABERTO.${todas ? 'delete' : 'add'}(${esc(JSON.stringify(k))});desenharApuracao()'>${todas ? 'mostrar menos' : 'e mais ' + (ns.length - lim)}</button>` : ''}`;
+}
+async function enviarLivroErp(fs) {
+  try {
+    for (const f of fs) await api('/api/livro-erp?nome=' + encodeURIComponent(f.name), {method: 'POST', body: f});
+    RES = await api('/api/resultado'); salvarApu(); desenharApuracao(); msg('Livro do ERP aplicado: as linhas de produtos seguem o relatório.');
+  } catch (e) { msg(e.message, true); }
+}
+async function removerLivroErp() {
+  try { await api('/api/livro-erp?remover=1', {method: 'POST', body: ''}); RES = await api('/api/resultado'); salvarApu(); desenharApuracao(); msg('Voltou aos valores dos XML.'); }
+  catch (e) { msg(e.message, true); }
 }
 function togCfop(c) { APU_ABERTO.has(c) ? APU_ABERTO.delete(c) : APU_ABERTO.add(c); desenharApuracao(); }
 function togTodos(on) { APU_ABERTO.clear(); if (on) RES.apuracao.linhas.forEach(l => APU_ABERTO.add(l.cfop)); desenharApuracao(); }

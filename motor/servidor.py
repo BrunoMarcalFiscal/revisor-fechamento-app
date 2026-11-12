@@ -2,7 +2,7 @@
 """Servidor local do Revisor do Fechamento (só biblioteca padrão + openpyxl/PyMuPDF já instalados)."""
 import glob, os, json, zipfile, io, shutil, re, threading, time, traceback, urllib.parse
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from . import comparador, planilha, exportar, relatorios, estrategico, scp, scp_planilha, espelho, piscofins
+from . import comparador, planilha, exportar, relatorios, estrategico, scp, scp_planilha, espelho, piscofins, livro_erp
 
 RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # dados (sessão, resultados, histórico, configurações) podem ficar fora do código: REVISOR_DADOS (disco do servidor)
@@ -146,6 +146,42 @@ def adm_ok(handler):
 
 def _id_fech(res):
     return '%s_%s' % ((res.get('empresa') or {}).get('cnpj') or 'semcnpj', res.get('competencia') or 'semmes')
+
+
+def livro_erp_aplicar(res=None, salvar=True):
+    """Aplica (ou desfaz) o livro fiscal do ERP guardado na sessão nas linhas da apuração do resultado."""
+    caminho = os.path.join(SAIDA, 'resultado.json')
+    res = res if res is not None else _json(caminho, None)
+    if not res or not res.get('apuracao'):
+        return res
+    lv = livro_erp.carregar(SESSAO)
+    ap = res['apuracao']
+    if lv:
+        livro_erp.aplicar(res, lv)
+    elif ap.get('livro_erp'):
+        # livro retirado: volta aos valores dos XML e tira as linhas que só existiam no livro
+        ap['linhas'] = [l for l in ap['linhas'] if l.get('docs') or l.get('csts')]
+        for l in ap['linhas']:
+            l.update(l.pop('xml', {})); l.pop('fonte', None)
+        ap['totais'] = {g: {k: round(sum(l.get(k, 0) or 0 for l in ap['linhas'] if l['grupo'] == g), 2) for k in ('vc', 'bc_icms', 'icms', 'bc_ipi', 'ipi', 'isentas', 'outras', 'st')}
+                        for g in ('entrada', 'saida')}
+        ap.pop('livro_erp', None)
+    if salvar:
+        json.dump(res, open(caminho, 'w', encoding='utf-8'), ensure_ascii=False, default=list)
+    return res
+
+
+def livro_erp_montar():
+    pasta = os.path.join(SESSAO, 'livro_erp')
+    pdfs = sorted(glob.glob(os.path.join(pasta, '*.pdf')))
+    alvo = os.path.join(SESSAO, 'livro_erp.json')
+    if not pdfs:
+        if os.path.exists(alvo):
+            os.remove(alvo)
+        return None
+    lv = livro_erp.montar(pdfs)
+    json.dump(lv, open(alvo, 'w', encoding='utf-8'), ensure_ascii=False)
+    return lv
 
 
 def arquivar(res=None):
@@ -790,6 +826,27 @@ class H(BaseHTTPRequestHandler):
                 shutil.copy(os.path.join(orig, 'resultado.json'), os.path.join(SAIDA, 'resultado.json'))
                 json.dump(_json(os.path.join(orig, 'meta.json'), {}), open(os.path.join(SESSAO, 'meta.json'), 'w', encoding='utf-8'), ensure_ascii=False)
                 return self._env(200, estado())
+            if u.path == '/api/livro-erp':
+                # Registro de Apuração do ICMS/IPI do ERP (PDF): passa a ser a fonte das linhas de produtos
+                pasta = os.path.join(SESSAO, 'livro_erp')
+                if q.get('remover'):
+                    shutil.rmtree(pasta, ignore_errors=True)
+                else:
+                    os.makedirs(pasta, exist_ok=True)
+                    corpo, tmp = self._corpo(), os.path.join(pasta, '_novo.pdf')
+                    open(tmp, 'wb').write(corpo)
+                    try:
+                        tipo = livro_erp.ler_pdf(tmp)['tipo']
+                    except Exception as e:
+                        os.remove(tmp)
+                        return self._env(400, {'erro': 'Não li o relatório: %s.' % e})
+                    os.replace(tmp, os.path.join(pasta, '%s.pdf' % tipo))
+                try:
+                    livro_erp_montar()
+                except Exception as e:
+                    return self._env(400, {'erro': str(e)})
+                res = livro_erp_aplicar()
+                return self._env(200, {'ok': True, 'livro': (res or {}).get('apuracao', {}).get('livro_erp')})
             if u.path == '/api/apuracao':
                 b = json.loads(self._corpo() or b'{}')
                 os.makedirs(SESSAO, exist_ok=True)
@@ -903,6 +960,7 @@ class H(BaseHTTPRequestHandler):
                 sa = saldo_anterior(res)
                 if sa and res.get('apuracao'):
                     res['apuracao']['saldo_anterior'] = sa
+                livro_erp_aplicar(res, salvar=False)
                 json.dump(res, open(os.path.join(SAIDA, 'resultado.json'), 'w', encoding='utf-8'), ensure_ascii=False, default=list)
                 meta = arquivar(json.loads(json.dumps(res, default=list)))
                 if meta:
