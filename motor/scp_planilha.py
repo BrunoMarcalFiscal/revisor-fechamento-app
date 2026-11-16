@@ -414,6 +414,12 @@ def montar(res, k, apu=None):
         a.c('D14', 'Sem a carga com estratégia de: %s. Use "Importar meses anteriores" ou digite na linha do mês.' % ', '.join(faltam), st='nota')
     abas.append(a)
 
+    # ============================================================ Reforma CBS (só com cfg['reforma_cbs'])
+    # comparativo informativo: PIS/COFINS do mês x CBS da reforma, com os mesmos créditos de hoje + o que passa a dar crédito
+    rf = c.get('reforma_cbs') or {}
+    if rf:
+        abas.append(_aba_reforma(res, k, rf, nome_mes, ano))
+
     # ============================================================ Icms (só quando há NF-e/CT-e)
     if res.get('tem_icms') is False:
         for nome, mapa in DT.items():
@@ -987,3 +993,69 @@ def pdf_zip(abas, cab):
         for i, a in enumerate(abas, start=1):
             z.writestr('%d - %s.pdf' % (i, a.nome), pdf_aba(a, cab))
     return buf.getvalue()
+
+
+REFORMA_EXTRAS = (('Material de uso e consumo', ('1556', '2556', '1407', '2407')), ('Combustível', ('1653', '2653')),
+                  ('Comunicação: telefone e internet', ('1303', '2303')))
+
+
+def _aba_reforma(res, k, rf, nome_mes, ano):
+    """Aba informativa: o PIS/COFINS apurado hoje ao lado da CBS (alíquota informada) e o reflexo do aluguel. Não mexe na apuração."""
+    mp, mc = k['matriz']['pis'], k['matriz']['cofins']
+    imp = k.get('importacao') or {}
+    aliq = float(rf if isinstance(rf, (int, float)) else (rf.get('aliq') or 0.113))
+    mem = {l['rot']: l['valor'] for l in (k.get('memoria') or {}).get('creditos', [])}
+    base_tot = next((v for r_, v in mem.items() if r_.startswith('= Base de créditos')), 0)
+    tom = next((v for r_, v in mem.items() if r_.startswith('Serviços tomados')), 0)
+    outros = _r(base_tot - tom)
+    linhas = (res.get('apuracao') or {}).get('linhas', [])
+    extras = [(rot, cfs, _r(sum(l['vc'] - l['icms'] for l in linhas if l['grupo'] == 'entrada' and l['cfop'] in cfs))) for rot, cfs in REFORMA_EXTRAS]
+    imp_base = _r(imp.get('base') or 0); imp_hoje = _r((imp.get('pis') or 0) + (imp.get('cofins') or 0))
+    saldo_ant = _r(mp['saldo_ant'] + mc['saldo_ant'])
+    loc = _r(k['resumo']['distribuicao'].get('loc_matriz') or 0)
+    a = Aba('Reforma CBS', {'A': 52, 'B': 20, 'C': 20, 'D': 18})
+    a.c('A1', 'PIS/COFINS HOJE x CBS DA REFORMA - %s/%s' % (nome_mes.upper(), ano), st='tit'); a.m('A1:D1')
+    a.c('A2', 'Simulação do mês isolado, com os créditos de hoje + o que passa a dar crédito. Não altera a apuração.', st='nota')
+    a.c('A4', 'Alíquota PIS'); a.c('B4', 0.0165, fmt='pct')
+    a.c('A5', 'Alíquota COFINS'); a.c('B5', 0.076, fmt='pct')
+    a.c('A6', 'Alíquota CBS'); a.c('B6', aliq, fmt='pct', ed='reforma_cbs')
+    a.c('A7', 'Base da importação'); a.c('B7', imp_base, fmt='brl')
+    a.c('A9', 'Item', st='cab'); a.c('B9', 'Hoje: PIS/COFINS', st='cab'); a.c('C9', 'Reforma: CBS', st='cab')
+    rec = _r(mp['base_deb'])
+    deb_h = _r(round(rec * 0.0165, 2) + round(rec * 0.076, 2)); deb_r = _r(rec * aliq)
+    a.c('A10', 'Receita tributada (base de débito)'); a.c('B10', rec, fmt='brl'); a.c('C10', rec, '=B10', fmt='brl')
+    a.c('A11', 'Débito'); a.c('B11', deb_h, '=ROUND(B10*B4,2)+ROUND(B10*B5,2)', fmt='brl'); a.c('C11', deb_r, '=ROUND(C10*B6,2)', fmt='brl')
+    a.c('A12', 'Entradas de produtos (insumo, frete, energia, revenda)'); a.c('B12', outros, fmt='brl'); a.c('C12', outros, '=B12', fmt='brl')
+    a.c('A13', 'Serviços tomados de PJ'); a.c('B13', _r(tom), fmt='brl'); a.c('C13', _r(tom), '=B13', fmt='brl')
+    r = 14
+    for rot, cfs, v in extras:
+        a.c('A%d' % r, '+ %s (%s)' % (rot, ', '.join(cfs))); a.c('B%d' % r, 0, fmt='brl'); a.c('C%d' % r, v, fmt='brl'); r += 1
+    rb = r
+    bh = _r(outros + tom); br = _r(bh + sum(v for _, _, v in extras))
+    a.c('A%d' % r, 'Base de crédito', st='cinza'); a.c('B%d' % r, bh, '=SUM(B12:B%d)' % (r - 1), st='cinza', fmt='brl'); a.c('C%d' % r, br, '=SUM(C12:C%d)' % (r - 1), st='cinza', fmt='brl'); r += 1
+    ch = _r(round(bh * 0.0165, 2) + round(bh * 0.076, 2)); cr = _r(br * aliq)
+    a.c('A%d' % r, 'Crédito sobre a base'); a.c('B%d' % r, ch, '=ROUND(B%d*B4,2)+ROUND(B%d*B5,2)' % (rb, rb), fmt='brl'); a.c('C%d' % r, cr, '=ROUND(C%d*B6,2)' % rb, fmt='brl'); rcb = r; r += 1
+    ci = _r(imp_base * aliq)
+    a.c('A%d' % r, 'Crédito da importação'); a.c('B%d' % r, imp_hoje, fmt='brl'); a.c('C%d' % r, ci, '=ROUND(B7*B6,2)', fmt='brl'); rci = r; r += 1
+    a.c('A%d' % r, 'Total de créditos', st='cinza'); a.c('B%d' % r, _r(ch + imp_hoje), '=B%d+B%d' % (rcb, rci), st='cinza', fmt='brl'); a.c('C%d' % r, _r(cr + ci), '=C%d+C%d' % (rcb, rci), st='cinza', fmt='brl'); rtc = r; r += 1
+    res_h = _r(deb_h - ch - imp_hoje); res_r = _r(deb_r - cr - ci)
+    a.c('A%d' % r, 'RESULTADO DO MÊS (débito − créditos)', st='pag'); a.c('B%d' % r, res_h, '=B11-B%d' % rtc, st='pag', fmt='brl'); a.c('C%d' % r, res_r, '=C11-C%d' % rtc, st='pag', fmt='brl'); rres = r; r += 1
+    a.c('A%d' % r, '(−) Saldo credor do mês anterior'); a.c('B%d' % r, saldo_ant, fmt='brl'); a.c('C%d' % r, 0, fmt='brl'); rsa = r; r += 1
+    a.c('A%d' % r, 'A RECOLHER', st='totg'); a.c('B%d' % r, _r(max(res_h - saldo_ant, 0)), '=MAX(0,B%d-B%d)' % (rres, rsa), st='totg', fmt='brl'); a.c('C%d' % r, _r(max(res_r, 0)), '=MAX(0,C%d-C%d)' % (rres, rsa), st='totg', fmt='brl'); r += 1
+    a.c('A%d' % r, 'Saldo credor para o mês seguinte'); a.c('B%d' % r, _r(max(saldo_ant - res_h, 0)), '=MAX(0,B%d-B%d)' % (rsa, rres), fmt='brl'); a.c('C%d' % r, _r(max(-res_r, 0)), '=MAX(0,C%d-C%d)' % (rsa, rres), fmt='brl'); r += 2
+    a.c('A%d' % r, 'Reforma x hoje (resultado do mês)', b=True); a.c('B%d' % r, _r(res_r - res_h), '=C%d-B%d' % (rres, rres), fmt='brl', b=True)
+    a.c('C%d' % r, 'positivo = a reforma paga mais', st='nota'); r += 2
+    a.c('A%d' % r, 'REFLEXO DO ALUGUEL', st='sub'); a.m('A%d:D%d' % (r, r)); r += 1
+    a.c('A%d' % r, 'Item', st='cab'); a.c('B%d' % r, 'Hoje (PIS/COFINS)', st='cab'); a.c('C%d' % r, 'Reforma (CBS)', st='cab'); a.c('D%d' % r, 'Diferença', st='cab'); r += 1
+    a.c('A%d' % r, 'Receita de locação de máquinas'); a.c('B%d' % r, loc, fmt='brl'); a.c('C%d' % r, loc, '=B%d' % r, fmt='brl'); rl = r; r += 1
+    th = _r(round(loc * 0.0165, 2) + round(loc * 0.076, 2)); tr = _r(loc * aliq)
+    a.c('A%d' % r, 'Tributo sobre o aluguel', b=True); a.c('B%d' % r, th, '=ROUND(B%d*B4,2)+ROUND(B%d*B5,2)' % (rl, rl), fmt='brl', b=True)
+    a.c('C%d' % r, tr, '=ROUND(C%d*B6,2)' % rl, fmt='brl', b=True); a.c('D%d' % r, _r(tr - th), '=C%d-B%d' % (r, r), fmt='brl', b=True); r += 1
+    a.c('A%d' % r, 'ISS sobre o aluguel'); a.c('B%d' % r, 'Não incide'); a.c('C%d' % r, 'Não incide'); r += 2
+    for t in ('Locação de máquinas não tem ISS: item 3.01 da LC 116/2003 vetado e Súmula Vinculante 31 do STF.',
+              'Se o contrato tiver operador, montagem ou manutenção, separar na nota o valor do serviço (esse pode ter ISS).',
+              'Na CBS, quem aluga a máquina toma crédito do valor destacado na nota.',
+              'Créditos da reforma: os mesmos de hoje + uso e consumo, combustível e comunicação (LC 214/2025, crédito amplo).',
+              'Crédito da CBS = valor destacado na nota de compra; fornecedor do Simples gera só o que recolhe no DAS.'):
+        a.c('A%d' % r, t, st='nota'); r += 1
+    return a
