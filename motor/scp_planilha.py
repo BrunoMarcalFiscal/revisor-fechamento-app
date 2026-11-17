@@ -1048,9 +1048,9 @@ def _aba_reforma(res, k, rf, nome_mes, ano):
     a.c('A%d' % r, 'Crédito sobre a base'); a.c('B%d' % r, ch, '=ROUND(B%d*B4,2)+ROUND(B%d*B5,2)' % (rb, rb), fmt='brl'); a.c('C%d' % r, cr, '=ROUND(C%d*B6,2)' % rb, fmt='brl'); rcb = r; r += 1
     cs_calc = _r(round(v_cheio * aliq, 2) + round(v_simp * das, 2))
     ch_serv = _r(round(tom * 0.0165, 2) + round(tom * 0.076, 2))
-    cs = max(cs_calc, ch_serv)
-    a.c('A%d' % r, 'Crédito dos serviços (reforma: no mínimo igual a hoje)'); a.c('B%d' % r, 0, fmt='brl')
-    a.c('C%d' % r, cs, '=MAX(ROUND(%.2f*B6,2)+ROUND(%.2f*%s,2),ROUND(B13*B4,2)+ROUND(B13*B5,2))' % (v_cheio, v_simp, repr(das)), fmt='brl'); rcs = r; r += 1
+    cs = cs_calc
+    a.c('A%d' % r, 'Crédito dos serviços (pelo regime do fornecedor)'); a.c('B%d' % r, 0, fmt='brl')
+    a.c('C%d' % r, cs, '=ROUND(%.2f*B6,2)+ROUND(%.2f*%s,2)' % (v_cheio, v_simp, repr(das)), fmt='brl'); rcs = r; r += 1
     if aj_simp:
         a.c('A%d' % r, '(−) Produtos de fornecedor do Simples (só o DAS)'); a.c('B%d' % r, 0, fmt='brl')
         a.c('C%d' % r, -_r(aj_simp * (aliq - das)), '=-ROUND(%.2f*(B6-%s),2)' % (aj_simp, repr(das)), fmt='brl'); raj = r; r += 1
