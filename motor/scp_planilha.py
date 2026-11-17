@@ -1010,7 +1010,9 @@ def _aba_reforma(res, k, rf, nome_mes, ano):
     outros = _r(base_tot - tom)
     linhas = (res.get('apuracao') or {}).get('linhas', [])
     extras = [(rot, cfs, _r(sum(l['vc'] - l['icms'] for l in linhas if l['grupo'] == 'entrada' and l['cfop'] in cfs))) for rot, cfs in REFORMA_EXTRAS]
-    imp_base = _r(imp.get('base') or 0); imp_hoje = _r((imp.get('pis') or 0) + (imp.get('cofins') or 0))
+    imp_hoje = _r((imp.get('pis') or 0) + (imp.get('cofins') or 0))
+    # base da CBS-Importação = a mesma do PIS/COFINS-Importação pago (valor aduaneiro), não o valor contábil da entrada
+    imp_base = _r(imp_hoje / 0.1175) if imp_hoje else _r(imp.get('base') or 0)
     saldo_ant = _r(mp['saldo_ant'] + mc['saldo_ant'])
     loc = _r(k['resumo']['distribuicao'].get('loc_matriz') or 0)
     a = Aba('Reforma CBS', {'A': 52, 'B': 20, 'C': 20, 'D': 18})
@@ -1019,7 +1021,7 @@ def _aba_reforma(res, k, rf, nome_mes, ano):
     a.c('A4', 'Alíquota PIS'); a.c('B4', 0.0165, fmt='pct')
     a.c('A5', 'Alíquota COFINS'); a.c('B5', 0.076, fmt='pct')
     a.c('A6', 'Alíquota CBS'); a.c('B6', aliq, fmt='pct', ed='reforma_cbs')
-    a.c('A7', 'Base da importação'); a.c('B7', imp_base, fmt='brl')
+    a.c('A7', 'Base da importação (valor aduaneiro, pelo PIS/COFINS pago)'); a.c('B7', imp_base, fmt='brl')
     a.c('A9', 'Item', st='cab'); a.c('B9', 'Hoje: PIS/COFINS', st='cab'); a.c('C9', 'Reforma: CBS', st='cab')
     rec = _r(mp['base_deb'])
     deb_h = _r(round(rec * 0.0165, 2) + round(rec * 0.076, 2)); deb_r = _r(rec * aliq)
