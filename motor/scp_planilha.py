@@ -1026,19 +1026,42 @@ def _aba_reforma(res, k, rf, nome_mes, ano):
     a.c('A10', 'Receita tributada (base de débito)'); a.c('B10', rec, fmt='brl'); a.c('C10', rec, '=B10', fmt='brl')
     a.c('A11', 'Débito'); a.c('B11', deb_h, '=ROUND(B10*B4,2)+ROUND(B10*B5,2)', fmt='brl'); a.c('C11', deb_r, '=ROUND(C10*B6,2)', fmt='brl')
     a.c('A12', 'Entradas de produtos (insumo, frete, energia, revenda)'); a.c('B12', outros, fmt='brl'); a.c('C12', outros, '=B12', fmt='brl')
-    a.c('A13', 'Serviços tomados de PJ'); a.c('B13', _r(tom), fmt='brl'); a.c('C13', _r(tom), '=B13', fmt='brl')
+    # serviços: hoje = os que ficaram no crédito; reforma = todos, pelo regime do fornecedor (Simples só o DAS, MEI zero)
+    todos = k.get('tomados') or []
+    tom_all = _r(sum(t['valor'] for t in todos))
+    das = float(rf.get('das', 0.01)) if isinstance(rf, dict) else 0.01
+    simp, mei_, reg = (set(rf.get(x) or []) if isinstance(rf, dict) else set() for x in ('simples', 'mei', 'simples_regular'))
+    v_simp = _r(sum(t['valor'] for t in todos if t.get('cnpj') in simp and t.get('cnpj') not in reg))
+    v_mei = _r(sum(t['valor'] for t in todos if t.get('cnpj') in mei_))
+    v_cheio = _r(tom_all - v_simp - v_mei)
+    extras += [(x[0], (), _r(x[1])) for x in ((rf.get('extras_manuais') or []) if isinstance(rf, dict) else [])]
+    aj_simp = _r((rf.get('ajuste_simples_produtos') or 0) if isinstance(rf, dict) else 0)
+    a.c('A13', 'Serviços tomados (hoje: os do crédito; reforma: todos)'); a.c('B13', _r(tom), fmt='brl'); a.c('C13', tom_all, fmt='brl')
     r = 14
     for rot, cfs, v in extras:
-        a.c('A%d' % r, '+ %s (%s)' % (rot, ', '.join(cfs))); a.c('B%d' % r, 0, fmt='brl'); a.c('C%d' % r, v, fmt='brl'); r += 1
+        a.c('A%d' % r, '+ %s%s' % (rot, (' (%s)' % ', '.join(cfs)) if cfs else '')); a.c('B%d' % r, 0, fmt='brl'); a.c('C%d' % r, v, fmt='brl'); r += 1
     rb = r
-    bh = _r(outros + tom); br = _r(bh + sum(v for _, _, v in extras))
-    a.c('A%d' % r, 'Base de crédito', st='cinza'); a.c('B%d' % r, bh, '=SUM(B12:B%d)' % (r - 1), st='cinza', fmt='brl'); a.c('C%d' % r, br, '=SUM(C12:C%d)' % (r - 1), st='cinza', fmt='brl'); r += 1
+    bh = _r(outros + tom); br = _r(outros + sum(v for _, _, v in extras))
+    a.c('A%d' % r, 'Base de crédito (sem serviços na reforma)', st='cinza'); a.c('B%d' % r, bh, '=B12+B13+SUM(B14:B%d)' % (r - 1) if r > 14 else '=B12+B13', st='cinza', fmt='brl')
+    a.c('C%d' % r, br, '=C12+SUM(C14:C%d)' % (r - 1) if r > 14 else '=C12', st='cinza', fmt='brl'); r += 1
     ch = _r(round(bh * 0.0165, 2) + round(bh * 0.076, 2)); cr = _r(br * aliq)
     a.c('A%d' % r, 'Crédito sobre a base'); a.c('B%d' % r, ch, '=ROUND(B%d*B4,2)+ROUND(B%d*B5,2)' % (rb, rb), fmt='brl'); a.c('C%d' % r, cr, '=ROUND(C%d*B6,2)' % rb, fmt='brl'); rcb = r; r += 1
+    cs_calc = _r(round(v_cheio * aliq, 2) + round(v_simp * das, 2))
+    ch_serv = _r(round(tom * 0.0165, 2) + round(tom * 0.076, 2))
+    cs = max(cs_calc, ch_serv)
+    a.c('A%d' % r, 'Crédito dos serviços (reforma: no mínimo igual a hoje)'); a.c('B%d' % r, 0, fmt='brl')
+    a.c('C%d' % r, cs, '=MAX(ROUND(%.2f*B6,2)+ROUND(%.2f*%s,2),ROUND(B13*B4,2)+ROUND(B13*B5,2))' % (v_cheio, v_simp, repr(das)), fmt='brl'); rcs = r; r += 1
+    if aj_simp:
+        a.c('A%d' % r, '(−) Produtos de fornecedor do Simples (só o DAS)'); a.c('B%d' % r, 0, fmt='brl')
+        a.c('C%d' % r, -_r(aj_simp * (aliq - das)), '=-ROUND(%.2f*(B6-%s),2)' % (aj_simp, repr(das)), fmt='brl'); raj = r; r += 1
+    else:
+        raj = None
     ci = _r(imp_base * aliq)
     a.c('A%d' % r, 'Crédito da importação'); a.c('B%d' % r, imp_hoje, fmt='brl'); a.c('C%d' % r, ci, '=ROUND(B7*B6,2)', fmt='brl'); rci = r; r += 1
-    a.c('A%d' % r, 'Total de créditos', st='cinza'); a.c('B%d' % r, _r(ch + imp_hoje), '=B%d+B%d' % (rcb, rci), st='cinza', fmt='brl'); a.c('C%d' % r, _r(cr + ci), '=C%d+C%d' % (rcb, rci), st='cinza', fmt='brl'); rtc = r; r += 1
-    res_h = _r(deb_h - ch - imp_hoje); res_r = _r(deb_r - cr - ci)
+    tot_r = _r(cr + ci + cs - (_r(aj_simp * (aliq - das)) if raj else 0))
+    a.c('A%d' % r, 'Total de créditos', st='cinza'); a.c('B%d' % r, _r(ch + imp_hoje), '=B%d+B%d' % (rcb, rci), st='cinza', fmt='brl')
+    a.c('C%d' % r, tot_r, '=C%d+C%d+C%d%s' % (rcb, rci, rcs, ('+C%d' % raj) if raj else ''), st='cinza', fmt='brl'); rtc = r; r += 1
+    res_h = _r(deb_h - ch - imp_hoje); res_r = _r(deb_r - tot_r)
     a.c('A%d' % r, 'RESULTADO DO MÊS (débito − créditos)', st='pag'); a.c('B%d' % r, res_h, '=B11-B%d' % rtc, st='pag', fmt='brl'); a.c('C%d' % r, res_r, '=C11-C%d' % rtc, st='pag', fmt='brl'); rres = r; r += 1
     a.c('A%d' % r, '(−) Saldo credor do mês anterior'); a.c('B%d' % r, saldo_ant, fmt='brl'); a.c('C%d' % r, 0, fmt='brl'); rsa = r; r += 1
     a.c('A%d' % r, 'A RECOLHER', st='totg'); a.c('B%d' % r, _r(max(res_h - saldo_ant, 0)), '=MAX(0,B%d-B%d)' % (rres, rsa), st='totg', fmt='brl'); a.c('C%d' % r, _r(max(res_r, 0)), '=MAX(0,C%d-C%d)' % (rres, rsa), st='totg', fmt='brl'); r += 1
@@ -1055,7 +1078,7 @@ def _aba_reforma(res, k, rf, nome_mes, ano):
     for t in ('Locação de máquinas não tem ISS: item 3.01 da LC 116/2003 vetado e Súmula Vinculante 31 do STF.',
               'Se o contrato tiver operador, montagem ou manutenção, separar na nota o valor do serviço (esse pode ter ISS).',
               'Na CBS, quem aluga a máquina toma crédito do valor destacado na nota.',
-              'Créditos da reforma: os mesmos de hoje + uso e consumo, combustível e comunicação (LC 214/2025, crédito amplo).',
-              'Crédito da CBS = valor destacado na nota de compra; fornecedor do Simples gera só o que recolhe no DAS.'):
+              'Reforma: crédito amplo (LC 214/2025) de todos os serviços, uso e consumo, combustível e comunicação.',
+              'Fornecedor do Simples gera só a CBS do DAS (salvo quem optar pelo regime regular); MEI não gera crédito.'):
         a.c('A%d' % r, t, st='nota'); r += 1
     return a
